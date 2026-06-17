@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.core.paths import ensure_app_directories
+from app.database.init_db import init_database
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
@@ -83,6 +84,7 @@ def apply_style(app: QApplication) -> None:
 
 def main() -> int:
     ensure_app_directories()
+    init_database()
 
     app = QApplication(sys.argv)
     apply_style(app)
