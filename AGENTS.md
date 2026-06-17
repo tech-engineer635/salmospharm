@@ -697,6 +697,7 @@ Pour chaque demande de modification ou d’implémentation, Codex doit :
 7. donner les commandes à lancer ;
 8. donner les tests manuels à faire ;
 9. signaler clairement les limites ou points non terminés.
+10. mettre à jour `.gitignore` au fur et à mesure si de nouveaux fichiers, dossiers ou artefacts générés doivent être ignorés.
 ```
 
 Codex ne doit pas :

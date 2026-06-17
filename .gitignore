@@ -36,6 +36,8 @@ dist/
 *.iss~
 
 # PyInstaller and installer temporary files
+*.pyz
+*.pkg
 *.manifest
 *.toc
 *.log
