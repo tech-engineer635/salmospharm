@@ -1,0 +1,10 @@
+PySide6
+SQLAlchemy
+alembic
+passlib[bcrypt]
+pywin32
+python-escpos
+reportlab
+openpyxl
+pytest
+pyinstaller

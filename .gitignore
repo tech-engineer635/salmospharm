@@ -1,0 +1,63 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment and editor files
+.env
+.env.*
+*.local
+.vscode/
+.idea/
+
+# Windows and system files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Build and packaging outputs
+build/
+dist/
+*.spec
+*.exe
+*.msi
+*.cab
+*.iss~
+
+# PyInstaller and installer temporary files
+*.manifest
+*.toc
+*.log
+installer/output/
+installer/Output/
+
+# Local application data and generated files
+*.sqlite
+*.sqlite3
+*.db
+*.spharm
+*.bak
+backups/
+logs/
+exports/
+factures/
+
+# Reports and generated documents
+*.pdf
+*.xlsx
+*.xls
+
+# Keep source placeholders
+!app/assets/.gitkeep
+!installer/.gitkeep
