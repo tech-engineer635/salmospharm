@@ -63,3 +63,8 @@ factures/
 # Keep source placeholders
 !app/assets/.gitkeep
 !installer/.gitkeep
+
+# instruction ia personnalisé 
+DEV_SOCLE_CRITIQUE.md
+DEV_INTERFACE_PYSIDE6.md
+DEV_TESTS_IMPRESSION_PACKAGING.md
