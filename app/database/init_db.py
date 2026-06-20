@@ -1,4 +1,4 @@
-"""Initialisation minimale de la base SQLite."""
+"""Initialisation de la base SQLite SALMOSPHARM."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from sqlalchemy.engine import Engine
 from app.core.paths import ensure_app_directories
 from app.database.connection import create_app_engine, engine
 from app.database.models import Base
+from app.database.seed import seed_initial_data
 
 
 def init_database(database_path: Path | None = None, database_engine: Engine | None = None) -> None:
@@ -23,3 +24,4 @@ def init_database(database_path: Path | None = None, database_engine: Engine | N
 
     with target_engine.begin() as connection:
         Base.metadata.create_all(bind=connection)
+        seed_initial_data(connection)
