@@ -700,6 +700,15 @@ Pour chaque demande de modification ou d’implémentation, Codex doit :
 10. mettre à jour `.gitignore` au fur et à mesure si de nouveaux fichiers, dossiers ou artefacts générés doivent être ignorés.
 ```
 
+Règle de lisibilité du code :
+
+```txt
+- ajouter des commentaires ou docstrings sur les fonctions importantes ;
+- commenter les fonctionnalités majeures ou les blocs de logique qui portent une règle métier ;
+- expliquer brièvement les validations, transactions, permissions, génération de sécurité ou traitements sensibles ;
+- éviter les commentaires évidents qui répètent simplement le nom d’une variable ou une ligne de code simple.
+```
+
 Codex ne doit pas :
 
 ```txt
