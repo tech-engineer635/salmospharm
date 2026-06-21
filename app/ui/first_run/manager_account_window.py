@@ -481,6 +481,6 @@ class RecoveryCodeDialog(QDialog):
         close_button.clicked.connect(self.accept)
 
         layout.addWidget(title)
-        layout.addWidget(message)
+        layout.addWidget(message) 
         layout.addWidget(code)
         layout.addWidget(close_button)

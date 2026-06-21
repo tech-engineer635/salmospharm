@@ -148,3 +148,69 @@ first_run_window_ok
 - Alignement du fond du contenu defilable sur le fond principal `#fbfdff`.
 - Masquage du scroll horizontal parasite.
 - Verification : pas de scroll vertical en taille normale, scroll vertical actif seulement en hauteur reduite.
+
+## 2026-06-22 - Phase 6 - Repositories de base
+
+### Ce qui a ete fait
+
+- Mise en place des repositories de base pour les tables officielles :
+  - utilisateurs
+  - categories
+  - produits
+  - lots_produits
+  - mouvements_stock
+  - ventes
+  - lignes_vente via `VenteRepository`
+  - alertes
+  - journaux_activite
+  - parametres
+- Renforcement du repository utilisateur deja existant avec les lectures par id, role et statut actif.
+- Ajout de requetes utiles aux prochains services :
+  - recherche produit par nom ou code-barres
+  - liste des produits actifs
+  - liste des lots disponibles pour aider FEFO
+  - calcul simple du stock disponible vendable
+  - creation de ventes et lignes de vente
+  - recuperation des ventes par vendeur
+  - creation et lecture des alertes non lues
+  - creation et lecture des journaux d'activite
+  - lecture de l'enregistrement principal des parametres
+- Conservation de la separation des responsabilites :
+  - les repositories font l'acces base
+  - les decisions metier restent reservees aux services
+  - aucune logique de permission complete ni validation de vente complete n'a ete ajoutee dans les repositories
+
+### Fichiers principaux
+
+- `app/repositories/utilisateur_repository.py`
+- `app/repositories/__init__.py`
+- `app/repositories/categorie_repository.py`
+- `app/repositories/produit_repository.py`
+- `app/repositories/lot_produit_repository.py`
+- `app/repositories/stock_repository.py`
+- `app/repositories/vente_repository.py`
+- `app/repositories/alerte_repository.py`
+- `app/repositories/journal_repository.py`
+- `app/repositories/parametre_repository.py`
+- `tests/test_repositories.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commande executee :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultat :
+
+```txt
+8 passed
+```
+
+### Limites restantes
+
+- Les repositories ne remplacent pas les services metier : permissions, validation de vente, transactions critiques et FEFO complet seront implementes dans les phases suivantes.
+- Le service de journalisation n'est pas encore branche aux actions sensibles existantes.
+- Les repositories de rapport/export ne sont pas crees, car les rapports ne doivent pas devenir des tables et seront traites plus tard par requetes ou vues.
