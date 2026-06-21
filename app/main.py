@@ -11,7 +11,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.core.paths import ensure_app_directories
 from app.database.init_db import init_database
+from app.services.auth_service import AuthService
+from app.ui.first_run.manager_account_window import FirstRunWindow
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 
@@ -87,10 +90,24 @@ def main() -> int:
     init_database()
 
     app = QApplication(sys.argv)
+    app.setFont(QFont("Segoe UI", 10))
     apply_style(app)
 
-    window = MainWindow()
-    window.show()
+    auth_service = AuthService()
+    if auth_service.existe_utilisateur():
+        window = MainWindow()
+        window.show()
+    else:
+        first_run_window = FirstRunWindow(auth_service=auth_service)
+
+        def show_main_window_after_creation() -> None:
+            main_window = MainWindow()
+            app.main_window = main_window
+            main_window.show()
+
+        first_run_window.compte_cree.connect(show_main_window_after_creation)
+        first_run_window.show()
+        app.first_run_window = first_run_window
 
     return app.exec()
 
