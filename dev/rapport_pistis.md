@@ -214,3 +214,72 @@ Resultat :
 - Les repositories ne remplacent pas les services metier : permissions, validation de vente, transactions critiques et FEFO complet seront implementes dans les phases suivantes.
 - Le service de journalisation n'est pas encore branche aux actions sensibles existantes.
 - Les repositories de rapport/export ne sont pas crees, car les rapports ne doivent pas devenir des tables et seront traites plus tard par requetes ou vues.
+
+## 2026-06-22 - Phase 7 - Constantes, exceptions et permissions
+
+### Ce qui a ete fait
+
+- Creation du fichier `app/core/constants.py` pour centraliser les constantes officielles :
+  - roles `GERANT` et `VENDEUR`
+  - devise unique `CDF`
+  - paiement unique `ESPECES`
+  - statut de vente `VALIDEE`
+  - types de mouvements de stock
+  - types d'alertes
+  - largeurs de ticket 58 et 80
+  - actions de journalisation obligatoires
+- Completion du fichier `app/core/exceptions.py` avec les exceptions applicatives principales :
+  - `PermissionRefuseeError`
+  - `StockInsuffisantError`
+  - `ProduitExpireError`
+  - `ProduitInactifError`
+  - `UtilisateurInactifError`
+  - `BackupInvalideError`
+  - `ImprimanteIndisponibleError`
+  - `AuthentificationError`
+- Creation du fichier `app/core/permissions.py` pour centraliser les permissions par role.
+- Definition des permissions vendeur limitees aux actions autorisees :
+  - connexion
+  - dashboard
+  - recherche produit
+  - consultation stock
+  - creation vente
+  - impression/reimpression de ses tickets
+  - historique personnel
+- Definition des permissions gerant avec acces complet.
+- Ajout de fonctions de verification utilisables par les services :
+  - `role_valide`
+  - `permissions_pour_role`
+  - `a_permission`
+  - `exiger_permission`
+  - `exiger_role_valide`
+- Remplacement de la constante locale `ROLE_GERANT` dans `auth_service.py` par la constante officielle.
+
+### Fichiers principaux
+
+- `app/core/constants.py`
+- `app/core/exceptions.py`
+- `app/core/permissions.py`
+- `app/services/auth_service.py`
+- `tests/test_permissions.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commande executee :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultat :
+
+```txt
+12 passed
+```
+
+### Limites restantes
+
+- Les services metier des phases suivantes doivent appeler `exiger_permission` pour bloquer les actions sensibles cote service.
+- Les permissions ne sont pas encore branchees a une session utilisateur complete, car l'ecran de connexion et la session memoire arrivent en phase 9.
+- Les actions de journalisation sont centralisees, mais le service `journal_service.py` reste a creer et brancher.

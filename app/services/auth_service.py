@@ -8,15 +8,13 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.constants import ROLE_GERANT
 from app.core.exceptions import PremierGerantExisteDejaError, UtilisateurExisteDejaError, ValidationError
 from app.core.security import hasher_mot_de_passe
 from app.database.connection import create_session
 from app.database.models import Utilisateur
 from app.repositories.utilisateur_repository import UtilisateurRepository
 from app.services.recuperation_service import RecuperationService
-
-
-ROLE_GERANT = "GERANT"
 
 
 @dataclass(frozen=True)

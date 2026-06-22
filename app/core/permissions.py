@@ -1,0 +1,102 @@
+"""Permissions centralisees par role utilisateur."""
+
+from __future__ import annotations
+
+from app.core.constants import ROLE_GERANT, ROLE_VENDEUR, ROLES_VALIDES
+from app.core.exceptions import PermissionRefuseeError
+
+
+PERMISSION_SE_CONNECTER = "SE_CONNECTER"
+PERMISSION_VOIR_DASHBOARD = "VOIR_DASHBOARD"
+PERMISSION_RECHERCHER_PRODUITS = "RECHERCHER_PRODUITS"
+PERMISSION_CONSULTER_STOCK = "CONSULTER_STOCK"
+PERMISSION_CREER_VENTE = "CREER_VENTE"
+PERMISSION_IMPRIMER_TICKET = "IMPRIMER_TICKET"
+PERMISSION_REIMPRIMER_SES_TICKETS = "REIMPRIMER_SES_TICKETS"
+PERMISSION_CONSULTER_HISTORIQUE_PERSONNEL = "CONSULTER_HISTORIQUE_PERSONNEL"
+
+PERMISSION_CREER_VENDEUR = "CREER_VENDEUR"
+PERMISSION_MODIFIER_UTILISATEUR = "MODIFIER_UTILISATEUR"
+PERMISSION_DESACTIVER_UTILISATEUR = "DESACTIVER_UTILISATEUR"
+PERMISSION_CREER_PRODUIT = "CREER_PRODUIT"
+PERMISSION_MODIFIER_PRODUIT = "MODIFIER_PRODUIT"
+PERMISSION_DESACTIVER_PRODUIT = "DESACTIVER_PRODUIT"
+PERMISSION_ENTRER_STOCK = "ENTRER_STOCK"
+PERMISSION_AJUSTER_STOCK = "AJUSTER_STOCK"
+PERMISSION_CONSULTER_PARAMETRES = "CONSULTER_PARAMETRES"
+PERMISSION_MODIFIER_PARAMETRES = "MODIFIER_PARAMETRES"
+PERMISSION_EXPORTER_DONNEES = "EXPORTER_DONNEES"
+PERMISSION_IMPORTER_DONNEES = "IMPORTER_DONNEES"
+PERMISSION_CONSULTER_RAPPORTS_GLOBAUX = "CONSULTER_RAPPORTS_GLOBAUX"
+PERMISSION_CONSULTER_TOUTES_VENTES = "CONSULTER_TOUTES_VENTES"
+PERMISSION_CONSULTER_HISTORIQUE_SYSTEME = "CONSULTER_HISTORIQUE_SYSTEME"
+PERMISSION_REIMPRIMER_TOUS_TICKETS = "REIMPRIMER_TOUS_TICKETS"
+PERMISSION_GERER_BACKUP = "GERER_BACKUP"
+
+PERMISSIONS_VENDEUR = frozenset(
+    {
+        PERMISSION_SE_CONNECTER,
+        PERMISSION_VOIR_DASHBOARD,
+        PERMISSION_RECHERCHER_PRODUITS,
+        PERMISSION_CONSULTER_STOCK,
+        PERMISSION_CREER_VENTE,
+        PERMISSION_IMPRIMER_TICKET,
+        PERMISSION_REIMPRIMER_SES_TICKETS,
+        PERMISSION_CONSULTER_HISTORIQUE_PERSONNEL,
+    }
+)
+
+PERMISSIONS_GERANT = frozenset(
+    {
+        *PERMISSIONS_VENDEUR,
+        PERMISSION_CREER_VENDEUR,
+        PERMISSION_MODIFIER_UTILISATEUR,
+        PERMISSION_DESACTIVER_UTILISATEUR,
+        PERMISSION_CREER_PRODUIT,
+        PERMISSION_MODIFIER_PRODUIT,
+        PERMISSION_DESACTIVER_PRODUIT,
+        PERMISSION_ENTRER_STOCK,
+        PERMISSION_AJUSTER_STOCK,
+        PERMISSION_CONSULTER_PARAMETRES,
+        PERMISSION_MODIFIER_PARAMETRES,
+        PERMISSION_EXPORTER_DONNEES,
+        PERMISSION_IMPORTER_DONNEES,
+        PERMISSION_CONSULTER_RAPPORTS_GLOBAUX,
+        PERMISSION_CONSULTER_TOUTES_VENTES,
+        PERMISSION_CONSULTER_HISTORIQUE_SYSTEME,
+        PERMISSION_REIMPRIMER_TOUS_TICKETS,
+        PERMISSION_GERER_BACKUP,
+    }
+)
+
+PERMISSIONS_PAR_ROLE = {
+    ROLE_GERANT: PERMISSIONS_GERANT,
+    ROLE_VENDEUR: PERMISSIONS_VENDEUR,
+}
+
+
+def role_valide(role: str | None) -> bool:
+    """Verifie qu'un role appartient au perimetre officiel de la version 1.0."""
+    return role in ROLES_VALIDES
+
+
+def permissions_pour_role(role: str | None) -> frozenset[str]:
+    """Retourne les permissions connues d'un role, ou un ensemble vide si le role est inconnu."""
+    return PERMISSIONS_PAR_ROLE.get(role or "", frozenset())
+
+
+def a_permission(role: str | None, permission: str) -> bool:
+    """Verifie une permission sans lever d'exception, utile pour masquer l'UI."""
+    return permission in permissions_pour_role(role)
+
+
+def exiger_permission(role: str | None, permission: str) -> None:
+    """Bloque une action sensible cote service quand le role n'est pas autorise."""
+    if not a_permission(role, permission):
+        raise PermissionRefuseeError("Vous n'avez pas l'autorisation d'effectuer cette action.")
+
+
+def exiger_role_valide(role: str | None) -> None:
+    """Refuse explicitement les roles inconnus avant toute decision metier."""
+    if not role_valide(role):
+        raise PermissionRefuseeError("Role utilisateur non autorise.")
