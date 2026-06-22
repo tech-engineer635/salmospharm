@@ -283,3 +283,43 @@ Resultat :
 - Les services metier des phases suivantes doivent appeler `exiger_permission` pour bloquer les actions sensibles cote service.
 - Les permissions ne sont pas encore branchees a une session utilisateur complete, car l'ecran de connexion et la session memoire arrivent en phase 9.
 - Les actions de journalisation sont centralisees, mais le service `journal_service.py` reste a creer et brancher.
+
+## 2026-06-22 - Correction transversale - Journalisation du premier lancement
+
+### Ce qui a ete fait
+
+- Creation du service `app/services/journal_service.py`.
+- Ajout d'une methode `journaliser` qui ecrit dans `journaux_activite` via `JournalRepository`.
+- Validation des actions de journalisation contre `ACTIONS_JOURNAL`.
+- Branchement de la journalisation dans `AuthService.creer_premier_gerant`.
+- Journalisation des actions sensibles du premier lancement :
+  - `COMPTE_GERANT_CREE`
+  - `CODE_RECUPERATION_GENERE`
+- Les journaux sont crees dans la meme transaction que le compte gerant.
+- Le code de recuperation en clair n'est jamais stocke dans les details du journal.
+
+### Fichiers principaux
+
+- `app/services/journal_service.py`
+- `app/services/auth_service.py`
+- `tests/test_auth_service.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commande executee :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultat :
+
+```txt
+13 passed
+```
+
+### Limites restantes
+
+- La connexion n'est pas encore journalisee, car la phase 9 n'est pas encore implementee.
+- Les autres actions sensibles seront branchees au fur et a mesure des services metier : produits, stock, vente, impression, backup et parametres.

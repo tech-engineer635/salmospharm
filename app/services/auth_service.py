@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import ROLE_GERANT
+from app.core.constants import ACTION_CODE_RECUPERATION_GENERE, ACTION_COMPTE_GERANT_CREE, ROLE_GERANT
 from app.core.exceptions import PremierGerantExisteDejaError, UtilisateurExisteDejaError, ValidationError
 from app.core.security import hasher_mot_de_passe
 from app.database.connection import create_session
 from app.database.models import Utilisateur
 from app.repositories.utilisateur_repository import UtilisateurRepository
+from app.services.journal_service import JournalService
 from app.services.recuperation_service import RecuperationService
 
 
@@ -29,10 +30,12 @@ class AuthService:
         session_factory: Callable[[], Session] = create_session,
         utilisateur_repository: UtilisateurRepository | None = None,
         recuperation_service: RecuperationService | None = None,
+        journal_service: JournalService | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._utilisateur_repository = utilisateur_repository or UtilisateurRepository()
         self._recuperation_service = recuperation_service or RecuperationService()
+        self._journal_service = journal_service or JournalService()
 
     def existe_utilisateur(self) -> bool:
         with self._session_factory() as session:
@@ -75,6 +78,7 @@ class AuthService:
 
             try:
                 self._utilisateur_repository.creer(session, utilisateur)
+                self._journaliser_creation_premier_gerant(session, utilisateur)
                 session.commit()
             except IntegrityError as exc:
                 session.rollback()
@@ -113,3 +117,22 @@ class AuthService:
 
         if mot_de_passe.isalpha() or mot_de_passe.isdigit():
             raise ValidationError("Le mot de passe doit contenir des lettres et des chiffres.")
+
+    def _journaliser_creation_premier_gerant(self, session: Session, utilisateur: Utilisateur) -> None:
+        """Trace les actions sensibles du premier lancement dans la meme transaction."""
+        self._journal_service.journaliser(
+            session,
+            action=ACTION_COMPTE_GERANT_CREE,
+            utilisateur_id=utilisateur.id,
+            table_cible="utilisateurs",
+            element_id=utilisateur.id,
+            details=f"Premier compte gerant cree pour l'identifiant {utilisateur.email}.",
+        )
+        self._journal_service.journaliser(
+            session,
+            action=ACTION_CODE_RECUPERATION_GENERE,
+            utilisateur_id=utilisateur.id,
+            table_cible="utilisateurs",
+            element_id=utilisateur.id,
+            details="Code de recuperation genere et affiche une seule fois.",
+        )
