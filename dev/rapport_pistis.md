@@ -369,3 +369,33 @@ bcrypt 4.0.1
 ### Limites restantes
 
 - Les dependances devront etre reinstallees depuis `requirements.txt` sur tout nouvel environnement pour eviter de revenir a `bcrypt 5.0.0`.
+
+## 2026-06-24 - Ajustement securite - Regle de mot de passe gerant
+
+### Ce qui a ete fait
+
+- Ajustement de la validation du mot de passe du premier gerant.
+- Le minimum est maintenant de 5 caracteres.
+- Suppression de l'obligation de melanger lettres et chiffres.
+- L'interdiction du compte `admin/admin` reste active.
+- Le hash passlib/bcrypt reste obligatoire.
+
+### Fichiers principaux
+
+- `app/services/auth_service.py`
+- `tests/test_auth_service.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commande executee :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultat :
+
+```txt
+16 passed
+```

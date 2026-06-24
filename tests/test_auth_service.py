@@ -106,6 +106,41 @@ def test_creer_premier_gerant_refuse_admin_admin(tmp_path):
     engine.dispose()
 
 
+def test_creer_premier_gerant_accepte_mot_de_passe_simple_de_cinq_caracteres(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    service = AuthService(session_factory=SessionLocal)
+
+    result = service.creer_premier_gerant(
+        nom_complet="Gerant Principal",
+        identifiant="gerant",
+        mot_de_passe="abcde",
+        confirmation_mot_de_passe="abcde",
+    )
+
+    with SessionLocal() as session:
+        utilisateur = session.execute(select(Utilisateur)).scalar_one()
+
+    engine.dispose()
+
+    assert result.utilisateur_id == utilisateur.id
+    assert verifier_mot_de_passe("abcde", utilisateur.mot_de_passe_hash)
+
+
+def test_creer_premier_gerant_refuse_mot_de_passe_moins_de_cinq_caracteres(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    service = AuthService(session_factory=SessionLocal)
+
+    with pytest.raises(ValidationError):
+        service.creer_premier_gerant(
+            nom_complet="Gerant Principal",
+            identifiant="gerant",
+            mot_de_passe="abcd",
+            confirmation_mot_de_passe="abcd",
+        )
+
+    engine.dispose()
+
+
 def test_hash_refuse_secret_trop_long_pour_eviter_troncature_bcrypt():
     with pytest.raises(ValidationError):
         hasher_mot_de_passe("a" * 73)

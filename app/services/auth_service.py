@@ -112,11 +112,8 @@ class AuthService:
         if identifiant == "admin" and mot_de_passe.lower() == "admin":
             raise ValidationError("Le compte admin/admin est interdit.")
 
-        if len(mot_de_passe) < 8:
-            raise ValidationError("Le mot de passe doit contenir au moins 8 caracteres.")
-
-        if mot_de_passe.isalpha() or mot_de_passe.isdigit():
-            raise ValidationError("Le mot de passe doit contenir des lettres et des chiffres.")
+        if len(mot_de_passe) < 5:
+            raise ValidationError("Le mot de passe doit contenir au moins 5 caracteres.")
 
     def _journaliser_creation_premier_gerant(self, session: Session, utilisateur: Utilisateur) -> None:
         """Trace les actions sensibles du premier lancement dans la meme transaction."""
