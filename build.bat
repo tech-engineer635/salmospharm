@@ -17,6 +17,7 @@ pyinstaller app/main.py ^
   --name SALMOSPHARM ^
   --windowed ^
   --onedir ^
+  --icon app/assets/logo.ico ^
   --add-data "app/assets;assets"
 
 echo.

@@ -5,13 +5,18 @@ from __future__ import annotations
 import secrets
 import string
 
-import bcrypt
+from passlib.context import CryptContext
+from passlib.exc import PasswordTruncateError, PasswordValueError
 
 from app.core.exceptions import ValidationError
 
 
 _RECOVERY_ALPHABET = string.ascii_uppercase + string.digits
-_BCRYPT_MAX_BYTES = 72
+_BCRYPT_CONTEXT = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__truncate_error=True,
+)
 
 
 def hasher_mot_de_passe(mot_de_passe: str) -> str:
@@ -36,17 +41,16 @@ def verifier_code_recuperation(code_recuperation: str, code_recuperation_hash: s
 
 
 def _hash_bcrypt(secret: str) -> str:
-    secret_bytes = _to_bcrypt_bytes(secret)
-    return bcrypt.hashpw(secret_bytes, bcrypt.gensalt()).decode("utf-8")
+    """Hash un secret avec passlib/bcrypt sans tronquer silencieusement."""
+    try:
+        return _BCRYPT_CONTEXT.hash(secret)
+    except (PasswordTruncateError, PasswordValueError) as exc:
+        raise ValidationError("Le secret depasse la longueur maximale autorisee.") from exc
 
 
 def _verify_bcrypt(secret: str, secret_hash: str) -> bool:
-    secret_bytes = _to_bcrypt_bytes(secret)
-    return bcrypt.checkpw(secret_bytes, secret_hash.encode("utf-8"))
-
-
-def _to_bcrypt_bytes(secret: str) -> bytes:
-    secret_bytes = secret.encode("utf-8")
-    if len(secret_bytes) > _BCRYPT_MAX_BYTES:
-        raise ValidationError("Le secret depasse la longueur maximale autorisee.")
-    return secret_bytes
+    """Verifie un secret via passlib et refuse les hash invalides proprement."""
+    try:
+        return bool(_BCRYPT_CONTEXT.verify(secret, secret_hash))
+    except (PasswordTruncateError, PasswordValueError, ValueError, TypeError):
+        return False

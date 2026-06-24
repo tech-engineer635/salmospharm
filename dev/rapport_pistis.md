@@ -323,3 +323,49 @@ Resultat :
 
 - La connexion n'est pas encore journalisee, car la phase 9 n'est pas encore implementee.
 - Les autres actions sensibles seront branchees au fur et a mesure des services metier : produits, stock, vente, impression, backup et parametres.
+
+## 2026-06-22 - Correction securite - Passlib bcrypt officiel
+
+### Ce qui a ete fait
+
+- Remplacement de l'utilisation directe du paquet `bcrypt` par `passlib.context.CryptContext`.
+- Alignement du code avec la stack officielle `passlib[bcrypt]`.
+- Pinning des dependances de securite dans `requirements.txt` :
+  - `passlib[bcrypt]==1.7.4`
+  - `bcrypt==4.0.1`
+- Correction du conflit local entre `passlib 1.7.4` et `bcrypt 5.0.0`.
+- Activation de `bcrypt__truncate_error=True` pour refuser la troncature silencieuse des secrets trop longs.
+- Conservation du comportement attendu :
+  - mot de passe hashe
+  - code de recuperation hashe
+  - verification des secrets via passlib
+  - aucun secret en clair stocke
+- Ajout d'un test pour refuser un secret trop long.
+
+### Fichiers principaux
+
+- `app/core/security.py`
+- `requirements.txt`
+- `tests/test_auth_service.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install bcrypt==4.0.1
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultat :
+
+```txt
+14 passed
+passlib 1.7.4
+bcrypt 4.0.1
+```
+
+### Limites restantes
+
+- Les dependances devront etre reinstallees depuis `requirements.txt` sur tout nouvel environnement pour eviter de revenir a `bcrypt 5.0.0`.

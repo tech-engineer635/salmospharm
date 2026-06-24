@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.constants import ACTION_CODE_RECUPERATION_GENERE, ACTION_COMPTE_GERANT_CREE
 from app.core.exceptions import PremierGerantExisteDejaError, ValidationError
-from app.core.security import verifier_code_recuperation, verifier_mot_de_passe
+from app.core.security import hasher_mot_de_passe, verifier_code_recuperation, verifier_mot_de_passe
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
 from app.database.models import JournalActivite, Utilisateur
@@ -104,6 +104,11 @@ def test_creer_premier_gerant_refuse_admin_admin(tmp_path):
         )
 
     engine.dispose()
+
+
+def test_hash_refuse_secret_trop_long_pour_eviter_troncature_bcrypt():
+    with pytest.raises(ValidationError):
+        hasher_mot_de_passe("a" * 73)
 
 
 def _create_test_session_factory(tmp_path):
