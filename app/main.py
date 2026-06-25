@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.core.paths import ensure_app_directories
 from app.database.init_db import init_database
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, SessionUtilisateur
 from app.ui.first_run.manager_account_window import FirstRunWindow
 from app.ui.login import LoginWindow
 from PySide6.QtCore import Qt
@@ -23,10 +23,11 @@ APP_TITLE = "SALMOSPHARM 133"
 
 
 class MainWindow(QMainWindow):
-    """Fenetre principale minimale pour verifier PySide6."""
+    """Fenetre principale transitoire en attendant le layout complet de la Phase 10."""
 
-    def __init__(self) -> None:
+    def __init__(self, session_utilisateur: SessionUtilisateur) -> None:
         super().__init__()
+        self.session_utilisateur = session_utilisateur
         self.setWindowTitle(APP_TITLE)
         self.setMinimumSize(480, 260)
 
@@ -38,6 +39,10 @@ class MainWindow(QMainWindow):
         message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         message_label.setObjectName("messageLabel")
 
+        session_label = QLabel(f"Connecte : {session_utilisateur.nom} ({session_utilisateur.role})")
+        session_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        session_label.setObjectName("sessionLabel")
+
         quit_button = QPushButton("Quitter")
         quit_button.clicked.connect(self.close)
 
@@ -46,6 +51,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(18)
         layout.addWidget(title_label)
         layout.addWidget(message_label)
+        layout.addWidget(session_label)
         layout.addWidget(quit_button, alignment=Qt.AlignmentFlag.AlignCenter)
 
         central_widget = QWidget()
@@ -67,6 +73,11 @@ def apply_style(app: QApplication) -> None:
         QLabel#messageLabel {
             color: #334e68;
             font-size: 15px;
+        }
+        QLabel#sessionLabel {
+            color: #166534;
+            font-size: 14px;
+            font-weight: 700;
         }
         QPushButton {
             background-color: #15803d;
@@ -99,8 +110,8 @@ def main() -> int:
     def show_login_window() -> None:
         login_window = LoginWindow(auth_service=auth_service)
 
-        def show_main_window_after_login(_utilisateur_connecte: object) -> None:
-            main_window = MainWindow()
+        def show_main_window_after_login(utilisateur_connecte: SessionUtilisateur) -> None:
+            main_window = MainWindow(session_utilisateur=utilisateur_connecte)
             app.main_window = main_window
             main_window.show()
             login_window.close()

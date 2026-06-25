@@ -22,6 +22,7 @@ from app.core.exceptions import (
     UtilisateurInactifError,
     ValidationError,
 )
+from app.core.permissions import exiger_role_valide
 from app.core.security import hasher_mot_de_passe, verifier_mot_de_passe
 from app.database.connection import create_session
 from app.database.models import Utilisateur
@@ -101,6 +102,7 @@ class AuthService:
                 session.commit()
                 raise AuthentificationError("Identifiant ou mot de passe incorrect.")
 
+            exiger_role_valide(utilisateur.role)
             self._journal_service.journaliser(
                 session,
                 action=ACTION_CONNEXION_REUSSIE,

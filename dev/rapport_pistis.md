@@ -441,3 +441,41 @@ Resultat :
 
 - La redirection apres connexion vers les layouts GERANT/VENDEUR attend la Phase 10.
 - La recuperation complete de mot de passe reste a implementer dans une phase suivante.
+
+## 2026-06-25 - Phase 10 - Preparation session et jonction apres connexion
+
+### Ce qui a ete fait
+
+- Validation explicite du role utilisateur dans `AuthService.connecter` avant creation de la session memoire.
+- Passage de la `SessionUtilisateur` a la fenetre principale transitoire apres connexion.
+- Conservation de la session connectee dans `MainWindow.session_utilisateur`.
+- Affichage du nom et du role de l'utilisateur connecte dans la fenetre principale minimale.
+- Ajout d'un test de jonction pour verifier que la fenetre principale recoit et affiche la session.
+- Ajout d'un test garantissant que `SessionUtilisateur` ne contient aucun hash ni donnee sensible.
+- Ajout d'un test garantissant qu'un role non officiel est refuse avant creation de la session memoire.
+
+### Fichiers principaux
+
+- `app/services/auth_service.py`
+- `app/main.py`
+- `tests/test_main_window.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commande executee :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultat :
+
+```txt
+25 passed
+```
+
+### Limites restantes
+
+- Le layout complet, la sidebar, la topbar et les pages placeholder restent du ressort DEV2 pour la suite de la Phase 10.
+- La deconnexion graphique sera finalisee avec le layout principal.

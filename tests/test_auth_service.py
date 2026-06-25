@@ -13,6 +13,7 @@ from app.core.constants import (
 )
 from app.core.exceptions import (
     AuthentificationError,
+    PermissionRefuseeError,
     PremierGerantExisteDejaError,
     UtilisateurInactifError,
     ValidationError,
@@ -21,7 +22,7 @@ from app.core.security import hasher_mot_de_passe, verifier_code_recuperation, v
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
 from app.database.models import JournalActivite, Utilisateur
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, SessionUtilisateur
 
 
 def test_creer_premier_gerant_hash_mot_de_passe_et_code(tmp_path):
@@ -260,6 +261,37 @@ def test_connecter_refuse_vendeur_desactive_et_journalise_echec(tmp_path):
     assert "compte desactive" in (journal.details or "")
 
 
+def test_session_utilisateur_ne_contient_aucune_donnee_sensible():
+    session = SessionUtilisateur(
+        utilisateur_id=1,
+        nom="Gerant Principal",
+        identifiant="gerant",
+        role="GERANT",
+    )
+
+    assert set(session.__dataclass_fields__) == {"utilisateur_id", "nom", "identifiant", "role"}
+    assert not hasattr(session, "mot_de_passe_hash")
+    assert not hasattr(session, "code_recuperation_hash")
+
+
+def test_connecter_refuse_role_non_officiel_avant_creation_session():
+    utilisateur = Utilisateur(
+        id=99,
+        nom="Role Invalide",
+        email="role-invalide",
+        mot_de_passe_hash=hasher_mot_de_passe("abcde"),
+        role="ADMIN",
+        actif=1,
+    )
+    service = AuthService(
+        session_factory=_FakeSession,
+        utilisateur_repository=_FakeUtilisateurRepository(utilisateur),
+    )
+
+    with pytest.raises(PermissionRefuseeError, match="Role utilisateur non autorise"):
+        service.connecter(identifiant="role-invalide", mot_de_passe="abcde")
+
+
 def _create_test_session_factory(tmp_path):
     database_path = tmp_path / "salmospharm.sqlite3"
     engine = create_app_engine(database_path)
@@ -271,3 +303,28 @@ def _create_test_session_factory(tmp_path):
         expire_on_commit=False,
         future=True,
     )
+
+
+class _FakeSession:
+    """Session minimale pour tester un role invalide sans contourner le schema SQLite."""
+
+    def __enter__(self):
+        self.committed = False
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def commit(self):
+        self.committed = True
+
+
+class _FakeUtilisateurRepository:
+    def __init__(self, utilisateur: Utilisateur) -> None:
+        self._utilisateur = utilisateur
+
+    def compter(self, session) -> int:
+        return 1
+
+    def chercher_par_email(self, session, email: str) -> Utilisateur | None:
+        return self._utilisateur if email == self._utilisateur.email else None
