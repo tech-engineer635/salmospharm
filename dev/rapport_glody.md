@@ -57,3 +57,102 @@ Ce fichier suit le travail du developpeur DEV2 charge de l'interface PySide6 de 
 - DEV2 ne doit pas modifier directement SQLite.
 - La Phase 10 sera abordee seulement apres validation de la connexion.
 
+## 2026-06-24 - Phase 9 UI - Ecran de connexion
+
+### Ce qui a ete fait
+
+- Creation de l'ecran de connexion dans `app/ui/login/login_window.py`.
+- Reproduction de la maquette fournie :
+  - panneau marque a gauche avec logo, nom SALMOSPHARM, badge 133, slogan et benefices;
+  - carte de connexion a droite;
+  - champs nom d'utilisateur et mot de passe;
+  - affichage/masquage du mot de passe;
+  - case `Se souvenir de moi`;
+  - lien `Mot de passe oublie ?`;
+  - bouton principal `Se connecter`;
+  - message d'acces reserve;
+  - footer bleu avec copyright et version.
+- Branchement de l'ecran dans `app/main.py` :
+  - si un utilisateur existe, l'application affiche maintenant `LoginWindow`;
+  - apres creation du premier gerant, l'application affiche `LoginWindow`.
+- Export de `LoginWindow` dans `app/ui/login/__init__.py`.
+- Ajout d'un test UI minimal dans `tests/test_login_window.py`.
+
+### Respect du perimetre DEV2
+
+- Aucune session SQLAlchemy n'a ete creee dans l'UI.
+- Aucune table n'a ete creee ou modifiee.
+- Aucune logique metier de connexion n'a ete inventee dans l'UI.
+- Si `AuthService.connecter` n'existe pas, l'ecran affiche un message propre indiquant que le service doit encore etre branche.
+- Les erreurs applicatives prevues sont capturees proprement si le service existe plus tard.
+
+### Fichiers principaux
+
+- `app/ui/login/login_window.py`
+- `app/ui/login/__init__.py`
+- `app/main.py`
+- `tests/test_login_window.py`
+- `dev/rapport_glody.md`
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m pytest tests\test_login_window.py
+.\.venv\Scripts\python.exe -m pip show bcrypt passlib
+```
+
+Resultats :
+
+```txt
+pytest global : 5 failed, 12 passed
+pytest login UI : 1 passed
+passlib : 1.7.4
+bcrypt : 5.0.0
+```
+
+### Limites restantes
+
+- La suite globale echoue encore a cause du conflit d'environnement deja signale par DEV3 : `passlib 1.7.4` avec `bcrypt 5.0.0`.
+- `requirements.txt` demande `bcrypt==4.0.1`, mais le venv courant contient `bcrypt 5.0.0`.
+- La vraie connexion reste a implementer cote service via un contrat du type `AuthService.connecter(identifiant, mot_de_passe)`.
+- La redirection vers les layouts Phase 10 attend la validation de la connexion metier.
+
+## 2026-06-24 - Phase 9 UI - Lien premier lancement vers connexion
+
+### Ce qui a ete fait
+
+- Ajout d'un signal `connexion_demandee` dans `FirstRunWindow`.
+- Branchement du lien `J'ai deja un compte` pour emettre ce signal.
+- Branchement dans `app/main.py` :
+  - clic sur `J'ai deja un compte` depuis l'ecran de creation du gerant;
+  - fermeture de l'ecran premier lancement;
+  - ouverture directe de `LoginWindow`.
+- Ajout d'un test UI minimal pour verifier le signal de demande de connexion.
+
+### Fichiers principaux
+
+- `app/ui/first_run/manager_account_window.py`
+- `app/main.py`
+- `tests/test_first_run_window.py`
+- `dev/rapport_glody.md`
+
+### Validation
+
+Commande executee :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_first_run_window.py tests\test_login_window.py
+```
+
+Resultat :
+
+```txt
+2 passed
+```
+
+### Limites restantes
+
+- Si aucun compte n'existe encore, l'ecran de connexion peut s'ouvrir via le lien, mais aucune connexion reelle ne pourra aboutir tant que le service `AuthService.connecter` n'est pas implemente et qu'un utilisateur n'existe pas en base.

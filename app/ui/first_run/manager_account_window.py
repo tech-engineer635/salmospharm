@@ -31,6 +31,7 @@ class FirstRunWindow(QMainWindow):
     """Fenetre de premier lancement inspiree de la maquette fournie."""
 
     compte_cree = Signal()
+    connexion_demandee = Signal()
 
     def __init__(self, auth_service: AuthService | None = None) -> None:
         super().__init__()
@@ -179,6 +180,9 @@ class FirstRunWindow(QMainWindow):
         login_link.setObjectName("loginLink")
         login_link.setAlignment(Qt.AlignmentFlag.AlignCenter)
         login_link.setMinimumHeight(26)
+        login_link.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        login_link.setOpenExternalLinks(False)
+        login_link.linkActivated.connect(self._request_login)
         card_layout.addWidget(login_link)
 
         scroll_layout.addWidget(card)
@@ -269,6 +273,10 @@ class FirstRunWindow(QMainWindow):
         mode = QLineEdit.EchoMode.Normal if self.show_password_checkbox.isChecked() else QLineEdit.EchoMode.Password
         self.password_input.setEchoMode(mode)
         self.confirm_password_input.setEchoMode(mode)
+
+    def _request_login(self) -> None:
+        """Demande au point d'entree d'afficher l'ecran de connexion."""
+        self.connexion_demandee.emit()
 
     def _submit(self) -> None:
         if not self.accept_checkbox.isChecked():

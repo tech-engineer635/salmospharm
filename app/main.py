@@ -13,6 +13,7 @@ from app.core.paths import ensure_app_directories
 from app.database.init_db import init_database
 from app.services.auth_service import AuthService
 from app.ui.first_run.manager_account_window import FirstRunWindow
+from app.ui.login import LoginWindow
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
@@ -94,18 +95,28 @@ def main() -> int:
     apply_style(app)
 
     auth_service = AuthService()
-    if auth_service.existe_utilisateur():
-        window = MainWindow()
-        window.show()
-    else:
-        first_run_window = FirstRunWindow(auth_service=auth_service)
 
-        def show_main_window_after_creation() -> None:
+    def show_login_window() -> None:
+        login_window = LoginWindow(auth_service=auth_service)
+
+        def show_main_window_after_login(_utilisateur_connecte: object) -> None:
             main_window = MainWindow()
             app.main_window = main_window
             main_window.show()
+            login_window.close()
 
-        first_run_window.compte_cree.connect(show_main_window_after_creation)
+        login_window.connexion_reussie.connect(show_main_window_after_login)
+        app.login_window = login_window
+        login_window.show()
+
+    if auth_service.existe_utilisateur():
+        show_login_window()
+    else:
+        first_run_window = FirstRunWindow(auth_service=auth_service)
+
+        first_run_window.compte_cree.connect(show_login_window)
+        first_run_window.connexion_demandee.connect(show_login_window)
+        first_run_window.connexion_demandee.connect(first_run_window.close)
         first_run_window.show()
         app.first_run_window = first_run_window
 
