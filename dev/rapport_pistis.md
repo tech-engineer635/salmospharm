@@ -399,3 +399,45 @@ Resultat :
 ```txt
 16 passed
 ```
+
+## 2026-06-25 - Phase 9 - Connexion utilisateur cote service
+
+### Ce qui a ete fait
+
+- Ajout de la connexion metier dans `AuthService.connecter`.
+- Conservation du contrat attendu par l'ecran DEV2 :
+  - `connecter(identifiant=..., mot_de_passe=...)`
+- Normalisation de l'identifiant en minuscules.
+- Verification du mot de passe avec passlib/bcrypt.
+- Refus d'un identifiant inconnu avec message generique.
+- Refus d'un mot de passe incorrect avec message generique.
+- Refus d'un compte desactive avec message utilisateur propre.
+- Ajout d'une session memoire `SessionUtilisateur` sans hash de mot de passe ni hash de code de recuperation.
+- Journalisation des connexions reussies avec `CONNEXION_REUSSIE`.
+- Journalisation des connexions echouees avec `CONNEXION_ECHOUEE`.
+- Aucun mot de passe saisi n'est stocke dans les journaux.
+
+### Fichiers principaux
+
+- `app/services/auth_service.py`
+- `tests/test_auth_service.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commande executee :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultat :
+
+```txt
+22 passed
+```
+
+### Limites restantes
+
+- La redirection apres connexion vers les layouts GERANT/VENDEUR attend la Phase 10.
+- La recuperation complete de mot de passe reste a implementer dans une phase suivante.
