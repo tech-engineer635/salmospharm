@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
 from app.services.auth_service import SessionUtilisateur
+from app.ui.components.ticket_preview import TicketPreviewPage
 from app.ui.gerant.dashboard_page import GerantDashboardPage
 from app.ui.gerant.produits import ProduitsPage
 from app.ui.gerant.stock import StockPage
@@ -109,8 +110,11 @@ class MainWindow(QMainWindow):
             self._add_page("dashboard", dashboard)
             self._add_page("produits", ProduitsPage(self.session_utilisateur, autoload=False))
             self._add_page("stock", StockPage(self.session_utilisateur, autoload=False))
+            facture_page = TicketPreviewPage(self.session_utilisateur)
+            facture_page.retour_demande.connect(lambda: self.navigate("dashboard"))
+            self._add_page("factures", facture_page)
             self._add_page("vendeurs", VendeursPage(self.session_utilisateur, autoload=False))
-            for key in ("ventes", "factures", "rapports", "historique", "alertes"):
+            for key in ("ventes", "rapports", "historique", "alertes"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             self._add_page("parametres", SettingsPage(self.set_theme))
             for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
@@ -121,8 +125,13 @@ class MainWindow(QMainWindow):
             dashboard = VendeurDashboardPage(self.session_utilisateur)
             dashboard.voir_tout_demande.connect(self.navigate)
             self._add_page("dashboard", dashboard)
-            self._add_page("nouvelle_vente", NouvelleVentePage(self.session_utilisateur, autoload=False))
-            for key in ("historique_ventes", "produits", "factures"):
+            nouvelle_vente = NouvelleVentePage(self.session_utilisateur, autoload=False)
+            nouvelle_vente.ticket_genere.connect(self._afficher_ticket)
+            self._add_page("nouvelle_vente", nouvelle_vente)
+            facture_page = TicketPreviewPage(self.session_utilisateur)
+            facture_page.retour_demande.connect(lambda: self.navigate("nouvelle_vente"))
+            self._add_page("factures", facture_page)
+            for key in ("historique_ventes", "produits"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             self._add_page("details_ventes_recentes", PlaceholderPage(_page_title("details_ventes_recentes"), _placeholder_text("details_ventes_recentes")))
 
@@ -146,6 +155,12 @@ class MainWindow(QMainWindow):
         scroll.setWidget(container)
         self._pages[key] = self.content_stack.addWidget(scroll)
         self._page_widgets[key] = page
+
+    def _afficher_ticket(self, ticket: object, message: str) -> None:
+        page = self._page_widgets.get("factures")
+        if page is not None and hasattr(page, "set_ticket"):
+            page.set_ticket(ticket, message)
+        self.navigate("factures")
 
     def set_theme(self, theme: str) -> None:
         self._theme = "dark" if theme == "dark" else "light"
@@ -533,6 +548,9 @@ class MainWindow(QMainWindow):
             QWidget#salePage {
                 background-color: #fbfdff;
             }
+            QWidget#ticketPage {
+                background-color: #fbfdff;
+            }
             QLabel#saleTitle {
                 color: #073264;
                 font-size: 26px;
@@ -709,6 +727,127 @@ class MainWindow(QMainWindow):
                 color: #64748b;
                 font-size: 13px;
                 padding: 12px 4px;
+            }
+            QLabel#ticketPageTitle {
+                color: #073264;
+                font-size: 26px;
+                font-weight: 900;
+            }
+            QLabel#ticketBreadcrumb {
+                color: #31547a;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QLabel#ticketNotice {
+                background-color: #e4f1ff;
+                border: 1px solid #c8e0ff;
+                border-radius: 7px;
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+                padding: 10px 14px;
+            }
+            QFrame#ticketCard {
+                background-color: #ffffff;
+                border: 1px solid #edf1f4;
+                border-radius: 10px;
+            }
+            QLabel#ticketLogo {
+                background-color: #ffffff;
+                color: #0b3567;
+                font-size: 18px;
+                font-weight: 900;
+            }
+            QLabel#ticketPharmacy {
+                color: #073264;
+                font-size: 20px;
+                font-weight: 900;
+            }
+            QLabel#ticketMeta {
+                color: #31547a;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QFrame#invoiceBox {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 8px;
+                min-width: 240px;
+            }
+            QLabel#invoiceTitle {
+                color: #108d38;
+                font-size: 19px;
+                font-weight: 900;
+            }
+            QLabel#invoiceNumber {
+                color: #073264;
+                font-size: 17px;
+                font-weight: 900;
+            }
+            QLabel#ticketBarcode {
+                color: #10243b;
+                font-family: "Consolas";
+                font-size: 20px;
+                font-weight: 900;
+            }
+            QFrame#ticketPartyBox {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 8px;
+            }
+            QLabel#ticketPartyTitle {
+                color: #0b3567;
+                font-size: 12px;
+                font-weight: 900;
+            }
+            QLabel#ticketPartyValue {
+                color: #073264;
+                font-size: 15px;
+                font-weight: 900;
+            }
+            QLabel#ticketPartySub {
+                color: #31547a;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel#ticketTableHeader {
+                background-color: #064f8e;
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 900;
+                min-height: 34px;
+                padding: 0 12px;
+            }
+            QLabel#ticketTableCell {
+                background-color: #ffffff;
+                border-bottom: 1px solid #edf1f4;
+                color: #073264;
+                font-size: 12px;
+                font-weight: 700;
+                min-height: 34px;
+                padding: 0 12px;
+            }
+            QFrame#ticketTotals {
+                background-color: #ffffff;
+                border: 1px solid #edf1f4;
+                border-radius: 8px;
+                min-width: 420px;
+            }
+            QLabel#ticketTotalLabel,
+            QLabel#ticketTotalValue {
+                color: #073264;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QLabel#ticketTotalLabelStrong {
+                color: #073264;
+                font-size: 16px;
+                font-weight: 900;
+            }
+            QLabel#ticketTotalValueStrong {
+                color: #073264;
+                font-size: 19px;
+                font-weight: 900;
             }
             QWidget#vendorsPage {
                 background-color: #fbfdff;

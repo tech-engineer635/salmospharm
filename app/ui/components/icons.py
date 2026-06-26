@@ -101,6 +101,19 @@ def ui_icon(name: str, color: str = "#526173", size: int = 24) -> QIcon:
         painter.drawLine(8 * s, 8 * s, 12 * s, 4 * s)
         painter.drawLine(16 * s, 8 * s, 12 * s, 4 * s)
         painter.drawRoundedRect(5 * s, 16 * s, 14 * s, 4 * s, 1.5 * s, 1.5 * s)
+    elif name in {"download"}:
+        painter.drawLine(12 * s, 4 * s, 12 * s, 16 * s)
+        painter.drawLine(8 * s, 12 * s, 12 * s, 16 * s)
+        painter.drawLine(16 * s, 12 * s, 12 * s, 16 * s)
+        painter.drawRoundedRect(5 * s, 18 * s, 14 * s, 3 * s, 1.5 * s, 1.5 * s)
+    elif name in {"print", "printer"}:
+        painter.drawRoundedRect(6 * s, 3 * s, 12 * s, 6 * s, 1.5 * s, 1.5 * s)
+        painter.drawRoundedRect(4 * s, 9 * s, 16 * s, 8 * s, 2 * s, 2 * s)
+        painter.drawRoundedRect(7 * s, 14 * s, 10 * s, 7 * s, 1.5 * s, 1.5 * s)
+        painter.drawPoint(17 * s, 12 * s)
+    elif name in {"close", "x"}:
+        painter.drawLine(6 * s, 6 * s, 18 * s, 18 * s)
+        painter.drawLine(18 * s, 6 * s, 6 * s, 18 * s)
     elif name in {"filter"}:
         painter.drawPolygon([_p(4, 5, s), _p(20, 5, s), _p(14, 12, s), _p(14, 19, s), _p(10, 21, s), _p(10, 12, s)])
     elif name in {"tag"}:

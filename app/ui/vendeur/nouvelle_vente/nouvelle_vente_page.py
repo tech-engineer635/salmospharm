@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -20,10 +20,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core.exceptions import SalmospharmError
+from app.core.exceptions import ImprimanteIndisponibleError, SalmospharmError
 from app.database.models import Categorie
 from app.services.auth_service import SessionUtilisateur
+from app.services.impression_service import ImpressionService
 from app.services.produit_service import ProduitService
+from app.services.ticket_service import TicketService
 from app.services.vente_service import LignePanierPayload, ProduitVendable, VentePayload, VenteService
 from app.ui.components.icons import ui_icon
 
@@ -41,11 +43,15 @@ class CartLine:
 class NouvelleVentePage(QWidget):
     """Ecran vendeur pour composer un panier puis valider une vente definitive."""
 
+    ticket_genere = Signal(object, str)
+
     def __init__(
         self,
         session_utilisateur: SessionUtilisateur,
         vente_service: VenteService | None = None,
         produit_service: ProduitService | None = None,
+        ticket_service: TicketService | None = None,
+        impression_service: ImpressionService | None = None,
         autoload: bool = True,
         parent: QWidget | None = None,
     ) -> None:
@@ -54,6 +60,8 @@ class NouvelleVentePage(QWidget):
         self.session_utilisateur = session_utilisateur
         self._vente_service = vente_service or VenteService()
         self._produit_service = produit_service or ProduitService()
+        self._ticket_service = ticket_service or TicketService()
+        self._impression_service = impression_service or ImpressionService()
         self._categories: list[Categorie] = []
         self._produits: list[ProduitVendable] = []
         self._categorie_active: int | None = None
@@ -386,14 +394,27 @@ class NouvelleVentePage(QWidget):
                     montant_recu=self.received_input.value(),
                 ),
             )
+            ticket = self._ticket_service.generer_ticket(self.session_utilisateur, result.vente_id)
+            impression_message = self._gerer_impression_auto(ticket)
             self._cart.clear()
             self.received_input.setValue(0)
             self._charger_produits()
             self._remplir_panier()
             self.print_button.setEnabled(True)
-            self._afficher_info(f"Vente {result.numero_vente} validee. Monnaie: {_format_cdf(result.monnaie_rendue)}.")
+            self.ticket_genere.emit(ticket, impression_message)
         except SalmospharmError as exc:
             self._afficher_erreur(str(exc))
+
+    def _gerer_impression_auto(self, ticket) -> str:
+        if not ticket.impression_auto:
+            return f"Vente {ticket.numero_vente} validee. Apercu du ticket genere."
+        try:
+            self._impression_service.imprimer_ticket(ticket)
+            self._ticket_service.journaliser_impression(self.session_utilisateur, ticket)
+            return f"Vente {ticket.numero_vente} validee. Ticket envoye a l'imprimante."
+        except ImprimanteIndisponibleError as exc:
+            self._ticket_service.journaliser_erreur_impression(self.session_utilisateur, ticket, str(exc))
+            return f"Vente {ticket.numero_vente} validee. {exc}"
 
     def _afficher_info(self, message: str) -> None:
         QMessageBox.information(self, "SALMOSPHARM", message)

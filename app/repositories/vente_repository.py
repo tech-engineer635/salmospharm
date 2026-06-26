@@ -15,6 +15,17 @@ class VenteRepository:
         statement = select(Vente).options(selectinload(Vente.lignes)).where(Vente.id == vente_id)
         return session.execute(statement).scalar_one_or_none()
 
+    def chercher_detail_par_id(self, session: Session, vente_id: int) -> Vente | None:
+        statement = (
+            select(Vente)
+            .options(
+                selectinload(Vente.vendeur),
+                selectinload(Vente.lignes).selectinload(LigneVente.produit),
+            )
+            .where(Vente.id == vente_id)
+        )
+        return session.execute(statement).scalar_one_or_none()
+
     def chercher_par_numero(self, session: Session, numero_vente: str) -> Vente | None:
         statement = select(Vente).where(Vente.numero_vente == numero_vente)
         return session.execute(statement).scalar_one_or_none()
@@ -53,4 +64,3 @@ class VenteRepository:
     def lister_toutes(self, session: Session) -> list[Vente]:
         statement = select(Vente).order_by(Vente.cree_le.desc(), Vente.id.desc())
         return list(session.execute(statement).scalars().all())
-

@@ -410,7 +410,8 @@ def test_navigation_affiche_page_placeholder_sans_acces_base():
     labels = [label.text() for label in window.findChildren(QLabel)]
 
     assert "Factures" in labels
-    assert "Placeholder de consultation des recus. Aucune table factures n'est creee." in labels
+    assert "Facture / Recu" in labels
+    assert "Aucun ticket selectionne. Validez une vente pour afficher le recu." in labels
 
     window.close()
     app.processEvents()

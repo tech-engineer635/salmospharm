@@ -847,7 +847,7 @@ Resultats :
 - Le titre de page vendeur suit le meme libelle `Recherche produit`.
 - Renforcement de `VenteService.valider_vente()` : le service confirme en base que l'utilisateur connecte est encore actif avant de creer la vente, les lignes, les mouvements de stock ou le journal.
 - Ajout d'un test de vente pour refuser un vendeur desactive et verifier que la tentative reste atomique.
-- Decision explicite : l'apercu et l'impression du ticket restent visibles comme fonctionnalite attendue mais sont reportes a la Phase 16, dediee aux tickets et a l'impression thermique.
+- Decision de stabilisation initiale : l'apercu et l'impression du ticket etaient reportes a la Phase 16. La section Phase 16 ci-dessous leve ce report.
 
 ### Validation executee
 
@@ -872,4 +872,51 @@ Build PyInstaller reussi, executable genere : dist\SALMOSPHARM\SALMOSPHARM.exe
 3. Verifier que le menu affiche `Recherche produit`.
 4. Aller dans `Nouvelle vente`, ajouter un produit actif avec lot non expire et stock disponible.
 5. Cliquer sur `Encaisser`.
-6. Verifier que la vente est validee, que le stock diminue et que l'absence de ticket/impression reste attendue jusqu'a la Phase 16.
+6. Verifier que la vente est validee, que le stock diminue et que le ticket s'affiche apres encaissement.
+
+## Phase 16 - Tickets et impression thermique
+
+### Perimetre implemente
+
+- Ajout de `TicketService` pour generer un ticket depuis une vente validee, sans creer de table `factures`.
+- Les donnees du recu viennent de `ventes`, `lignes_vente`, `produits`, `utilisateurs` et `parametres`.
+- Respect des permissions de consultation : le gerant peut generer un ticket de toute vente, le vendeur uniquement de ses ventes.
+- Ajout de l'export PDF local via ReportLab.
+- Ajout de `ImpressionService` pour formater un ticket thermique 58 mm ou 80 mm et envoyer le flux texte a une imprimante Windows configuree.
+- Gestion propre des erreurs d'impression : absence d'imprimante ou echec pilote retourne un message utilisateur et journalise `ERREUR_IMPRESSION` sans annuler la vente.
+- Branchement de `Nouvelle vente` : apres encaissement, le ticket est genere, l'impression automatique est tentee si activee, puis l'ecran `Facture / Recu` est affiche.
+- Remplacement du placeholder `Factures` par une page d'apercu avec actions `Imprimer`, `Telecharger (PDF)` et `Fermer`.
+
+### Fichiers principaux
+
+- `app/services/ticket_service.py`
+- `app/services/impression_service.py`
+- `app/repositories/vente_repository.py`
+- `app/ui/components/ticket_preview.py`
+- `app/ui/vendeur/nouvelle_vente/nouvelle_vente_page.py`
+- `app/ui/layouts/main_layout.py`
+- `tests/test_ticket_service.py`
+- `tests/test_main_window.py`
+- `dev/rapport_pistis.md`
+
+### Validation executee
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_ticket_service.py tests/test_main_window.py tests/test_vente_service.py
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\pyinstaller.exe app/main.py --name SALMOSPHARM --windowed --onedir --icon app/assets/logo.ico --add-data "app/assets;assets" --noconfirm
+```
+
+Resultats :
+
+```txt
+35 passed
+83 passed
+Build PyInstaller reussi, executable genere : dist\SALMOSPHARM\SALMOSPHARM.exe
+```
+
+### Limites restantes
+
+- L'impression reelle 58 mm / 80 mm doit etre testee avec une imprimante thermique Windows configuree dans les parametres.
+- La reimpression depuis un historique de ventes sera finalisee avec la Phase 17, quand les ecrans d'historique existeront.
+- L'impression ESC/POS avancee reste limitee au flux texte brut Windows pour garder l'application locale et testable sans imprimante pendant le developpement.
