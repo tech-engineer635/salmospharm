@@ -60,6 +60,7 @@ factures/
 *.xlsx
 *.xls
 dev/*_design_check.png
+dev/stock_spacing_*.png
 
 # Keep source placeholders
 !app/assets/.gitkeep

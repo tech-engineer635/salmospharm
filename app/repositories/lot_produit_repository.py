@@ -34,6 +34,10 @@ class LotProduitRepository:
         )
         return list(session.execute(statement).scalars().all())
 
+    def lister(self, session: Session) -> list[LotProduit]:
+        statement = select(LotProduit).order_by(LotProduit.id.desc())
+        return list(session.execute(statement).scalars().all())
+
     def lister_disponibles_par_produit(
         self,
         session: Session,
@@ -65,3 +69,7 @@ class LotProduitRepository:
         session.flush()
         return lot
 
+    def mettre_a_jour(self, session: Session, lot: LotProduit) -> LotProduit:
+        session.add(lot)
+        session.flush()
+        return lot

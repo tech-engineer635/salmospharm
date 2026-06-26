@@ -10,6 +10,7 @@ from app.main import MainWindow
 from app.services.auth_service import SessionUtilisateur
 from app.services.produit_service import ProduitPayload
 from app.ui.gerant.produits import ProduitsPage
+from app.ui.gerant.stock import StockPage
 from app.ui.layouts.sidebar import Sidebar
 
 
@@ -143,6 +144,19 @@ def test_navigation_gerant_produits_ouvre_page_catalogue():
     app.processEvents()
 
 
+def test_navigation_gerant_stock_ouvre_page_lots():
+    app = _app()
+    window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
+
+    page = window._page_widgets["stock"]
+
+    assert isinstance(page, StockPage)
+    assert window.content_stack.currentIndex() == window._pages["dashboard"]
+
+    window.close()
+    app.processEvents()
+
+
 def test_page_produits_rend_reactivation_visible_pour_produit_desactive():
     app = _app()
     session = _session(ROLE_GERANT)
@@ -175,6 +189,33 @@ def test_page_produits_ne_scrolle_pas_en_plein_ecran():
 
     assert scroll.verticalScrollBar().maximum() == 0
     assert button_bottom <= scroll.viewport().height()
+
+    window.close()
+    app.processEvents()
+
+
+def test_page_stock_ne_scrolle_pas_en_plein_ecran():
+    app = _app()
+    window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
+    page = window._page_widgets["stock"]
+
+    window.resize(1450, 900)
+    window.show()
+    window.navigate("stock")
+    app.processEvents()
+    scroll = window.content_stack.currentWidget()
+    price_bottom = page.entry_price_input.geometry().bottom()
+    checkbox_top = page.entry_expiration_known.geometry().top()
+    checkbox_right = page.entry_expiration_known.geometry().right()
+    date_left = page.entry_expiration_input.geometry().left()
+    submit_bottom = page.entry_submit_button.mapTo(page.side_scroll.viewport(), page.entry_submit_button.rect().bottomRight()).y()
+
+    assert scroll.verticalScrollBar().maximum() == 0
+    assert page.entry_quantity_input.height() >= 36
+    assert page.entry_price_input.height() >= 36
+    assert price_bottom + 12 <= checkbox_top
+    assert checkbox_right + 8 <= date_left
+    assert submit_bottom <= page.side_scroll.viewport().height()
 
     window.close()
     app.processEvents()

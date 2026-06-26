@@ -112,6 +112,10 @@ def ui_icon(name: str, color: str = "#526173", size: int = 24) -> QIcon:
         painter.drawLine(15 * s, 5 * s, 19 * s, 9 * s)
         painter.drawLine(6 * s, 18 * s, 5 * s, 21 * s)
         painter.drawLine(5 * s, 21 * s, 8 * s, 20 * s)
+    elif name in {"refresh", "reload"}:
+        painter.drawArc(5 * s, 5 * s, 14 * s, 14 * s, 35 * 16, 270 * 16)
+        painter.drawLine(17 * s, 5 * s, 20 * s, 5 * s)
+        painter.drawLine(20 * s, 5 * s, 20 * s, 8 * s)
     else:
         painter.drawEllipse(5 * s, 5 * s, 14 * s, 14 * s)
 

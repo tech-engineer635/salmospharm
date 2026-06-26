@@ -24,6 +24,7 @@ from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
 from app.services.auth_service import SessionUtilisateur
 from app.ui.gerant.dashboard_page import GerantDashboardPage
 from app.ui.gerant.produits import ProduitsPage
+from app.ui.gerant.stock import StockPage
 from app.ui.layouts.sidebar import Sidebar
 from app.ui.layouts.topbar import Topbar
 from app.ui.vendeur.dashboard_page import VendeurDashboardPage
@@ -105,7 +106,8 @@ class MainWindow(QMainWindow):
             dashboard.voir_tout_demande.connect(self.navigate)
             self._add_page("dashboard", dashboard)
             self._add_page("produits", ProduitsPage(self.session_utilisateur, autoload=False))
-            for key in ("stock", "ventes", "factures", "rapports", "vendeurs", "historique", "alertes"):
+            self._add_page("stock", StockPage(self.session_utilisateur, autoload=False))
+            for key in ("ventes", "factures", "rapports", "vendeurs", "historique", "alertes"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             self._add_page("parametres", SettingsPage(self.set_theme))
             for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
@@ -128,7 +130,7 @@ class MainWindow(QMainWindow):
         container = QWidget()
         container.setObjectName("pageContainer")
         layout = QVBoxLayout(container)
-        if key == "produits":
+        if key in {"produits", "stock"}:
             layout.setContentsMargins(26, 18, 22, 18)
         else:
             layout.setContentsMargins(28, 26, 28, 26)
@@ -494,6 +496,31 @@ class MainWindow(QMainWindow):
             QWidget#productsPage QPushButton#blueButton {
                 min-height: 30px;
                 padding: 0 12px;
+            }
+            QWidget#stockPage QLineEdit,
+            QWidget#stockPage QSpinBox,
+            QWidget#stockPage QComboBox,
+            QWidget#stockPage QDateEdit {
+                min-height: 36px;
+                font-size: 12px;
+                padding: 0 8px;
+            }
+            QWidget#stockPage QPushButton#primaryButton,
+            QWidget#stockPage QPushButton#blueButton,
+            QWidget#stockPage QPushButton#outlineButton {
+                min-height: 32px;
+                font-size: 12px;
+                padding: 0 12px;
+            }
+            QWidget#stockPage QCheckBox {
+                min-height: 30px;
+                font-size: 12px;
+                spacing: 8px;
+            }
+            QScrollArea#stockSideScroll,
+            QScrollArea#stockSideScroll QWidget#stockSideContainer {
+                background: transparent;
+                border: none;
             }
             QLabel#productsPageTitle {
                 color: #073264;

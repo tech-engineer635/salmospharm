@@ -46,3 +46,10 @@ class StockRepository:
         )
         return list(session.execute(statement).scalars().all())
 
+    def lister_mouvements_recents(self, session: Session, limit: int = 50) -> list[MouvementStock]:
+        statement = (
+            select(MouvementStock)
+            .order_by(MouvementStock.cree_le.desc(), MouvementStock.id.desc())
+            .limit(limit)
+        )
+        return list(session.execute(statement).scalars().all())

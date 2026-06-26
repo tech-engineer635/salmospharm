@@ -597,3 +597,75 @@ Resultats :
 49 passed
 products_fullscreen_no_scroll_ok
 ```
+
+## Phase 12 - Lots et stock
+
+### Perimetre implemente
+
+- Ajout du service `StockService` pour les entrees de stock, les ajustements et la consultation des lots/mouvements.
+- Ajout du service `AlerteService` pour creer les alertes `STOCK_FAIBLE` et `EXPIRATION_PROCHE` sans doublons ouverts.
+- Extension des repositories lots et mouvements stock, en conservant l'acces base hors UI.
+- Ajout de l'ecran gerant `StockPage` : cartes de synthese, table des lots, historique recent, formulaire d'entree et formulaire d'ajustement.
+- Integration de la page stock dans le layout principal du gerant.
+- Ajout des tests metier et UI : entree, mise a jour lot, ajustement motive, refus quantite negative, refus vendeur, mouvements, journaux, alertes et absence de scroll plein ecran.
+
+### Fichiers principaux
+
+- `app/services/stock_service.py`
+- `app/services/alerte_service.py`
+- `app/repositories/lot_produit_repository.py`
+- `app/repositories/stock_repository.py`
+- `app/ui/gerant/stock/stock_page.py`
+- `app/ui/gerant/stock/__init__.py`
+- `app/ui/layouts/main_layout.py`
+- `app/ui/components/icons.py`
+- `tests/test_stock_service.py`
+- `tests/test_main_window.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+$env:QT_QPA_PLATFORM='offscreen'; $unique = 'salmospharm-phase12-stock-smoke-' + [guid]::NewGuid().ToString('N'); $env:LOCALAPPDATA=(New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP $unique)).FullName; .\.venv\Scripts\python.exe -
+```
+
+Resultats :
+
+```txt
+56 passed
+stock_page_ok
+```
+
+### Limites restantes
+
+- La sortie de stock par vente FEFO reste reservee a la phase vente.
+- L'import/export global de sauvegarde n'est pas modifie ici.
+- Les alertes sont creees au moment des entrees et ajustements ; un traitement global de recalcul pourra etre ajoute plus tard si la feuille de route le demande.
+
+### Correctif UI - Espacement du panneau stock
+
+- Augmentation controlee de la largeur du panneau lateral stock pour eviter les champs trop serres.
+- Separation claire de la ligne `Quantite / Prix achat` et du controle d'expiration.
+- Placement de `Date d'expiration connue` et du champ date sur une meme ligne lisible, sans chevauchement.
+- Ajustement des hauteurs des panneaux pour conserver l'absence de scroll en plein ecran.
+- Ajout d'assertions UI pour verifier que les controles ne se chevauchent pas et que le bouton d'enregistrement reste visible.
+- Reprise finale du formulaire avec des groupes `label + champ` non compressibles.
+- Passage du panneau de droite dans un scroll interne : si la hauteur manque, la colonne formulaire defile sans ecraser les champs ni faire scroller toute la page.
+- Ajout de `dev/stock_spacing_*.png` dans `.gitignore` pour ignorer les captures de diagnostic UI.
+
+Validation :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_main_window.py::test_page_stock_ne_scrolle_pas_en_plein_ecran
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultats :
+
+```txt
+1 passed
+56 passed
+```
