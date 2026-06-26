@@ -479,3 +479,121 @@ Resultat :
 
 - Le layout complet, la sidebar, la topbar et les pages placeholder restent du ressort DEV2 pour la suite de la Phase 10.
 - La deconnexion graphique sera finalisee avec le layout principal.
+
+## 2026-06-26 - Phase 11 - Produits et categories
+
+### Ce qui a ete fait
+
+- Creation du service metier `ProduitService` pour la gestion du catalogue :
+  - creation de categories ;
+  - creation de produits ;
+  - modification de produits ;
+  - desactivation de produits au lieu d'une suppression physique ;
+  - recherche par nom ou code-barres ;
+  - filtre par categorie et statut actif.
+- Ajout d'un payload `ProduitPayload` pour centraliser les donnees de fiche produit.
+- Application des validations Phase 11 cote service :
+  - gerant obligatoire pour creer, modifier et desactiver ;
+  - recherche produit limitee aux roles autorises ;
+  - prix en entier CDF ;
+  - prix negatif refuse ;
+  - stock minimum negatif refuse ;
+  - code-barres unique ;
+  - categorie invalide refusee.
+- Journalisation des actions sensibles :
+  - `PRODUIT_CREE` ;
+  - `PRODUIT_MODIFIE` ;
+  - `PRODUIT_DESACTIVE`.
+- Extension de `ProduitRepository` avec une recherche combinee et une mise a jour explicite.
+- Remplacement du placeholder gerant `Produits` par une page PySide6 fonctionnelle :
+  - formulaire categorie ;
+  - formulaire produit ;
+  - filtres catalogue ;
+  - tableau produits ;
+  - modification et desactivation via le service.
+- Reprise visuelle de la maquette `gerant_gestion_produit.png` :
+  - titre et recherche en haut de page ;
+  - cartes de synthese ;
+  - barre d'actions catalogue ;
+  - tableau dense ;
+  - colonne droite avec filtres rapides et formulaire produit.
+- Ajout d'un `PRODUCT.md` minimal pour documenter le registre produit de l'interface.
+
+### Fichiers principaux
+
+- `PRODUCT.md`
+- `app/services/produit_service.py`
+- `app/repositories/produit_repository.py`
+- `app/ui/gerant/produits/produits_page.py`
+- `app/ui/gerant/produits/__init__.py`
+- `app/ui/layouts/main_layout.py`
+- `tests/test_produit_service.py`
+- `tests/test_main_window.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+$env:QT_QPA_PLATFORM='offscreen'; $env:LOCALAPPDATA=(New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP 'salmospharm-products-design-smoke')).FullName; .\.venv\Scripts\python.exe -c "from PySide6.QtWidgets import QApplication; from app.core.paths import ensure_app_directories; from app.database.init_db import init_database; from app.services.auth_service import SessionUtilisateur; from app.ui.gerant.produits import ProduitsPage; ensure_app_directories(); init_database(); app=QApplication([]); page=ProduitsPage(SessionUtilisateur(1,'Gerant','gerant','GERANT')); assert page.products_table.columnCount()==7; assert page.total_metric.value_label.text() == '0'; print('products_design_ok')"
+```
+
+Resultats :
+
+```txt
+45 passed
+products_design_ok
+```
+
+### Limites restantes
+
+- La Phase 11 ne gere pas encore les lots, les entrees de stock, FEFO ou les ventes.
+- Le stock affiche dans la fiche produit reste limite au seuil minimum ; le stock disponible sera calcule depuis `lots_produits` en Phase 12.
+- La page produits affiche et modifie les champs principaux, mais les workflows d'export catalogue et de consultation avancee restent a traiter plus tard.
+
+### Correctif accessibilite - Reactivation produit
+
+- Ajout d'une action explicite `Reactiver ce produit` quand un produit desactive est selectionne.
+- Ajout d'un texte d'aide visible dans le formulaire pour expliquer l'etat actif/desactive.
+- Ajout de `ProduitService.reactiver_produit()` pour garder la reactivation cote service.
+- Journalisation de la reactivation via `PRODUIT_MODIFIE`.
+- Ajout de tests service et UI pour eviter qu'un produit desactive reste difficile a reactiver.
+
+Validation :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+$env:QT_QPA_PLATFORM='offscreen'; $env:LOCALAPPDATA=(New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP 'salmospharm-access-reactivate-smoke')).FullName; .\.venv\Scripts\python.exe -c "from PySide6.QtWidgets import QApplication; from app.core.paths import ensure_app_directories; from app.database.init_db import init_database; from app.services.auth_service import SessionUtilisateur; from app.ui.gerant.produits import ProduitsPage; ensure_app_directories(); init_database(); app=QApplication([]); page=ProduitsPage(SessionUtilisateur(1,'Gerant','gerant','GERANT')); assert page.disable_button.text() == 'Desactiver'; print('access_reactivation_ui_ok')"
+```
+
+Resultats :
+
+```txt
+48 passed
+access_reactivation_ui_ok
+```
+
+### Correctif UI - Spacing plein ecran produits
+
+- Resserrement du spacing vertical de l'ecran produits pour se rapprocher de la maquette fournie.
+- Reduction des marges propres a la page produits dans le layout principal.
+- Compression des cartes de synthese et des champs du panneau lateral.
+- Retrait du champ visible `Description` dans le formulaire principal pour eviter un formulaire trop haut ; le champ reste gere en interne par le service.
+- Masquage des controles de statut tant qu'aucun produit n'est selectionne.
+- Ajout d'un test anti-regression : en 1450x900, la page produits ne doit pas activer le scroll vertical et le bouton `Enregistrer` doit rester visible.
+
+Validation :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+$env:QT_QPA_PLATFORM='offscreen'; $env:LOCALAPPDATA=(New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP 'salmospharm-products-fit-check')).FullName; .\.venv\Scripts\python.exe -c "from PySide6.QtWidgets import QApplication; from app.core.paths import ensure_app_directories; from app.database.init_db import init_database; from app.services.auth_service import SessionUtilisateur; from app.ui.layouts.main_layout import MainWindow; ensure_app_directories(); init_database(); app=QApplication([]); w=MainWindow(SessionUtilisateur(1,'Gerant','gerant','GERANT')); w.resize(1450,900); w.show(); w.navigate('produits'); app.processEvents(); scroll=w.content_stack.currentWidget(); p=w._page_widgets['produits']; button_bottom=p.save_button.mapTo(scroll.viewport(), p.save_button.rect().bottomRight()).y(); assert scroll.verticalScrollBar().maximum()==0; assert button_bottom <= scroll.viewport().height(); print('products_fullscreen_no_scroll_ok')"
+```
+
+Resultats :
+
+```txt
+49 passed
+products_fullscreen_no_scroll_ok
+```

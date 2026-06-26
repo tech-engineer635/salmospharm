@@ -34,6 +34,28 @@ class ProduitRepository:
         )
         return list(session.execute(statement).scalars().all())
 
+    def rechercher(
+        self,
+        session: Session,
+        *,
+        terme: str = "",
+        categorie_id: int | None = None,
+        actifs_seulement: bool = False,
+    ) -> list[Produit]:
+        statement = select(Produit)
+        terme_normalise = terme.strip()
+        if terme_normalise:
+            motif = f"%{terme_normalise}%"
+            statement = statement.where(
+                Produit.nom.ilike(motif) | Produit.code_barres.ilike(motif)
+            )
+        if categorie_id is not None:
+            statement = statement.where(Produit.categorie_id == categorie_id)
+        if actifs_seulement:
+            statement = statement.where(Produit.actif == 1)
+        statement = statement.order_by(Produit.nom.asc())
+        return list(session.execute(statement).scalars().all())
+
     def rechercher_par_nom(self, session: Session, terme: str) -> list[Produit]:
         statement = (
             select(Produit)
@@ -47,7 +69,17 @@ class ProduitRepository:
         session.flush()
         return produit
 
+    def mettre_a_jour(self, session: Session, produit: Produit) -> Produit:
+        session.add(produit)
+        session.flush()
+        return produit
+
     def desactiver(self, session: Session, produit: Produit) -> Produit:
         produit.actif = 0
+        session.flush()
+        return produit
+
+    def reactiver(self, session: Session, produit: Produit) -> Produit:
+        produit.actif = 1
         session.flush()
         return produit

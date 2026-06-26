@@ -59,6 +59,7 @@ factures/
 *.pdf
 *.xlsx
 *.xls
+dev/*_design_check.png
 
 # Keep source placeholders
 !app/assets/.gitkeep

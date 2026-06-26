@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
 from app.services.auth_service import SessionUtilisateur
 from app.ui.gerant.dashboard_page import GerantDashboardPage
+from app.ui.gerant.produits import ProduitsPage
 from app.ui.layouts.sidebar import Sidebar
 from app.ui.layouts.topbar import Topbar
 from app.ui.vendeur.dashboard_page import VendeurDashboardPage
@@ -40,6 +41,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.session_utilisateur = session_utilisateur
         self._pages: dict[str, int] = {}
+        self._page_widgets: dict[str, QWidget] = {}
         self._theme = "light"
         self.setWindowTitle(APP_TITLE)
         self.setMinimumSize(1080, 680)
@@ -59,6 +61,9 @@ class MainWindow(QMainWindow):
         self.content_stack.setCurrentIndex(self._pages[key])
         self.sidebar.set_active(key)
         self.topbar.set_title(_page_title(key))
+        page = self._page_widgets.get(key)
+        if page is not None and hasattr(page, "on_show"):
+            page.on_show()
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -99,7 +104,8 @@ class MainWindow(QMainWindow):
             dashboard = GerantDashboardPage()
             dashboard.voir_tout_demande.connect(self.navigate)
             self._add_page("dashboard", dashboard)
-            for key in ("produits", "stock", "ventes", "factures", "rapports", "vendeurs", "historique", "alertes"):
+            self._add_page("produits", ProduitsPage(self.session_utilisateur, autoload=False))
+            for key in ("stock", "ventes", "factures", "rapports", "vendeurs", "historique", "alertes"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             self._add_page("parametres", SettingsPage(self.set_theme))
             for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
@@ -122,10 +128,14 @@ class MainWindow(QMainWindow):
         container = QWidget()
         container.setObjectName("pageContainer")
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(28, 26, 28, 26)
+        if key == "produits":
+            layout.setContentsMargins(26, 18, 22, 18)
+        else:
+            layout.setContentsMargins(28, 26, 28, 26)
         layout.addWidget(page)
         scroll.setWidget(container)
         self._pages[key] = self.content_stack.addWidget(scroll)
+        self._page_widgets[key] = page
 
     def set_theme(self, theme: str) -> None:
         self._theme = "dark" if theme == "dark" else "light"
@@ -252,6 +262,88 @@ class MainWindow(QMainWindow):
                 min-height: 42px;
                 padding: 0 16px;
             }
+            QLineEdit,
+            QSpinBox,
+            QComboBox {
+                background-color: #ffffff;
+                border: 1px solid #dce5eb;
+                border-radius: 7px;
+                color: #24364a;
+                font-size: 13px;
+                min-height: 36px;
+                padding: 0 10px;
+            }
+            QLineEdit:focus,
+            QSpinBox:focus,
+            QComboBox:focus {
+                border-color: #16a33a;
+            }
+            QCheckBox {
+                color: #334e68;
+                font-size: 13px;
+                font-weight: 700;
+                spacing: 8px;
+            }
+            QPushButton#primaryButton {
+                background-color: #108d38;
+                border: none;
+                border-radius: 7px;
+                color: #ffffff;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 38px;
+                padding: 0 16px;
+            }
+            QPushButton#primaryButton:hover {
+                background-color: #0b7831;
+            }
+            QPushButton#dangerButton {
+                background-color: #fff5f5;
+                border: 1px solid #f3c1c5;
+                border-radius: 7px;
+                color: #b4232f;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 38px;
+                padding: 0 16px;
+            }
+            QPushButton#dangerButton:disabled {
+                background-color: #f3f6f8;
+                border-color: #e0e7ed;
+                color: #8a98a8;
+            }
+            QPushButton#successButton {
+                background-color: #edf9f0;
+                border: 1px solid #9bd8ad;
+                border-radius: 7px;
+                color: #0a7f31;
+                font-size: 13px;
+                font-weight: 900;
+                min-height: 38px;
+                padding: 0 16px;
+            }
+            QPushButton#successButton:hover {
+                background-color: #dff4e5;
+            }
+            QTableWidget#productsTable {
+                background-color: #ffffff;
+                border: 1px solid #e3e9ee;
+                border-radius: 7px;
+                color: #24364a;
+                gridline-color: #edf1f4;
+                selection-background-color: #edf9f0;
+                selection-color: #10243b;
+            }
+            QHeaderView::section {
+                background-color: #f6f9fb;
+                border: none;
+                border-bottom: 1px solid #e3e9ee;
+                color: #516276;
+                font-size: 12px;
+                font-weight: 800;
+                min-height: 34px;
+                padding: 0 8px;
+            }
             QPushButton#dateButton,
             QPushButton#bellButton {
                 background-color: #ffffff;
@@ -370,11 +462,110 @@ class MainWindow(QMainWindow):
                 font-weight: 700;
             }
             QFrame#statCard,
+            QFrame#productMetricCard,
             QFrame#contentPanel,
             QFrame#placeholderCard {
                 background-color: #ffffff;
                 border: 1px solid #edf1f4;
                 border-radius: 10px;
+            }
+            QWidget#productsPage {
+                background-color: #fbfdff;
+            }
+            QWidget#productsPage QLineEdit,
+            QWidget#productsPage QSpinBox,
+            QWidget#productsPage QComboBox {
+                min-height: 24px;
+                font-size: 12px;
+                padding: 0 8px;
+            }
+            QWidget#productsPage QPushButton#primaryButton,
+            QWidget#productsPage QPushButton#outlineButton,
+            QWidget#productsPage QPushButton#dangerButton,
+            QWidget#productsPage QPushButton#successButton,
+            QWidget#productsPage QPushButton#blueButton {
+                min-height: 34px;
+                font-size: 12px;
+            }
+            QWidget#productsPage QPushButton#primaryButton,
+            QWidget#productsPage QPushButton#outlineButton,
+            QWidget#productsPage QPushButton#dangerButton,
+            QWidget#productsPage QPushButton#successButton,
+            QWidget#productsPage QPushButton#blueButton {
+                min-height: 30px;
+                padding: 0 12px;
+            }
+            QLabel#productsPageTitle {
+                color: #073264;
+                font-size: 24px;
+                font-weight: 900;
+            }
+            QLabel#productsPageSubtitle {
+                color: #31547a;
+                font-size: 13px;
+            }
+            QLineEdit#productsHeroSearch {
+                min-width: 360px;
+                max-width: 440px;
+                min-height: 38px;
+            }
+            QLabel#productMetricIcon_green {
+                background-color: #12a83f;
+                border-radius: 20px;
+            }
+            QLabel#productMetricIcon_blue {
+                background-color: #1f74d8;
+                border-radius: 20px;
+            }
+            QLabel#productMetricIcon_orange {
+                background-color: #ff8a00;
+                border-radius: 20px;
+            }
+            QLabel#productMetricIcon_purple {
+                background-color: #7b3fba;
+                border-radius: 20px;
+            }
+            QLabel#productMetricTitle {
+                color: #31547a;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QLabel#productMetricValue {
+                color: #073264;
+                font-size: 18px;
+                font-weight: 900;
+            }
+            QLabel#productMetricTrend_green,
+            QLabel#productMetricTrend_blue {
+                color: #108d38;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel#productMetricTrend_orange {
+                color: #f07900;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel#productMetricTrend_purple {
+                color: #7b3fba;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel#sidePanelTitle {
+                color: #073264;
+                font-size: 15px;
+                font-weight: 900;
+            }
+            QLabel#formFieldLabel {
+                color: #31547a;
+                font-size: 10px;
+                font-weight: 800;
+            }
+            QLabel#productStatusHint {
+                color: #31547a;
+                font-size: 12px;
+                line-height: 18px;
+                padding: 4px 0;
             }
             QLabel#iconBubble_green {
                 background-color: #16a33a;
@@ -459,6 +650,65 @@ class MainWindow(QMainWindow):
                 color: #516276;
                 padding: 6px 12px;
             }
+            QPushButton#outlineButton {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 7px;
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 38px;
+                padding: 0 16px;
+            }
+            QPushButton#outlineButton:disabled {
+                color: #8a98a8;
+                background-color: #f7fafc;
+            }
+            QPushButton#blueButton {
+                background-color: #064f8e;
+                border: none;
+                border-radius: 7px;
+                color: #ffffff;
+                font-size: 13px;
+                font-weight: 900;
+                min-height: 38px;
+                padding: 0 16px;
+            }
+            QPushButton#blueButton:hover {
+                background-color: #043f73;
+            }
+            QPushButton#linkButton {
+                background-color: transparent;
+                border: none;
+                color: #1269c7;
+                font-size: 12px;
+                font-weight: 800;
+                padding: 0;
+            }
+            QPushButton#paginationButton,
+            QPushButton#paginationButtonActive {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 7px;
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+                min-width: 32px;
+                min-height: 32px;
+            }
+            QPushButton#paginationButtonActive {
+                background-color: #064f8e;
+                color: #ffffff;
+                border-color: #064f8e;
+            }
+            QLabel#productsFooterText {
+                color: #64748b;
+                font-size: 12px;
+            }
+            QComboBox#pageSizeCombo {
+                min-width: 104px;
+                min-height: 32px;
+            }
             QLabel#linkLabel {
                 color: #1269c7;
                 text-decoration: underline;
@@ -525,6 +775,7 @@ class MainWindow(QMainWindow):
             }
             MainWindow[theme="dark"] QFrame#contentPanel,
             MainWindow[theme="dark"] QFrame#statCard,
+            MainWindow[theme="dark"] QFrame#productMetricCard,
             MainWindow[theme="dark"] QFrame#placeholderCard {
                 background-color: #1f2937;
                 border-color: #374151;
@@ -533,6 +784,9 @@ class MainWindow(QMainWindow):
                 color: #e5e7eb;
             }
             MainWindow[theme="dark"] QLineEdit#topbarSearch,
+            MainWindow[theme="dark"] QLineEdit,
+            MainWindow[theme="dark"] QSpinBox,
+            MainWindow[theme="dark"] QComboBox,
             MainWindow[theme="dark"] QPushButton#dateButton,
             MainWindow[theme="dark"] QPushButton#bellButton,
             MainWindow[theme="dark"] QPushButton#menuButton {

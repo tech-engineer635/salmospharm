@@ -93,6 +93,25 @@ def ui_icon(name: str, color: str = "#526173", size: int = 24) -> QIcon:
         painter.drawPath(path)
         painter.drawLine(12 * s, 9 * s, 12 * s, 14 * s)
         painter.drawPoint(12 * s, 17 * s)
+    elif name in {"plus", "add"}:
+        painter.drawLine(12 * s, 5 * s, 12 * s, 19 * s)
+        painter.drawLine(5 * s, 12 * s, 19 * s, 12 * s)
+    elif name in {"upload", "import"}:
+        painter.drawLine(12 * s, 16 * s, 12 * s, 4 * s)
+        painter.drawLine(8 * s, 8 * s, 12 * s, 4 * s)
+        painter.drawLine(16 * s, 8 * s, 12 * s, 4 * s)
+        painter.drawRoundedRect(5 * s, 16 * s, 14 * s, 4 * s, 1.5 * s, 1.5 * s)
+    elif name in {"filter"}:
+        painter.drawPolygon([_p(4, 5, s), _p(20, 5, s), _p(14, 12, s), _p(14, 19, s), _p(10, 21, s), _p(10, 12, s)])
+    elif name in {"tag"}:
+        painter.drawRoundedRect(5 * s, 5 * s, 14 * s, 14 * s, 2 * s, 2 * s)
+        painter.drawLine(5 * s, 12 * s, 12 * s, 19 * s)
+        painter.drawEllipse(14 * s, 8 * s, 2 * s, 2 * s)
+    elif name in {"edit", "pen"}:
+        painter.drawLine(6 * s, 18 * s, 17 * s, 7 * s)
+        painter.drawLine(15 * s, 5 * s, 19 * s, 9 * s)
+        painter.drawLine(6 * s, 18 * s, 5 * s, 21 * s)
+        painter.drawLine(5 * s, 21 * s, 8 * s, 20 * s)
     else:
         painter.drawEllipse(5 * s, 5 * s, 14 * s, 14 * s)
 

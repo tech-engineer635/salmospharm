@@ -8,6 +8,8 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QRadioButton
 from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
 from app.main import MainWindow
 from app.services.auth_service import SessionUtilisateur
+from app.services.produit_service import ProduitPayload
+from app.ui.gerant.produits import ProduitsPage
 from app.ui.layouts.sidebar import Sidebar
 
 
@@ -128,6 +130,56 @@ def test_dashboard_gerant_aujourdhui_et_voir_tout_ouvre_detail():
     app.processEvents()
 
 
+def test_navigation_gerant_produits_ouvre_page_catalogue():
+    app = _app()
+    window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
+
+    page = window._page_widgets["produits"]
+
+    assert isinstance(page, ProduitsPage)
+    assert window.content_stack.currentIndex() == window._pages["dashboard"]
+
+    window.close()
+    app.processEvents()
+
+
+def test_page_produits_rend_reactivation_visible_pour_produit_desactive():
+    app = _app()
+    session = _session(ROLE_GERANT)
+    page = ProduitsPage(session_utilisateur=session, produit_service=_FakeProduitService(), autoload=True)
+
+    page.products_table.selectRow(0)
+    app.processEvents()
+
+    assert page.disable_button.text() == "Reactiver ce produit"
+    assert page.disable_button.isEnabled()
+    assert page.disable_button.objectName() == "successButton"
+    assert "desactive" in page.product_status_hint.text()
+
+    page.close()
+    app.processEvents()
+
+
+def test_page_produits_ne_scrolle_pas_en_plein_ecran():
+    app = _app()
+    window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
+    page = window._page_widgets["produits"]
+    page._produit_service = _FakeProduitService()
+
+    window.resize(1450, 900)
+    window.show()
+    window.navigate("produits")
+    app.processEvents()
+    scroll = window.content_stack.currentWidget()
+    button_bottom = page.save_button.mapTo(scroll.viewport(), page.save_button.rect().bottomRight()).y()
+
+    assert scroll.verticalScrollBar().maximum() == 0
+    assert button_bottom <= scroll.viewport().height()
+
+    window.close()
+    app.processEvents()
+
+
 def test_bloc_utilisateur_ouvre_page_profil():
     app = _app()
     window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
@@ -230,3 +282,39 @@ def test_sidebar_deconnexion_emet_signal():
 
     sidebar.close()
     app.processEvents()
+
+
+class _FakeProduit:
+    def __init__(self, *, produit_id: int, nom: str, actif: int) -> None:
+        self.id = produit_id
+        self.nom = nom
+        self.code_barres = "FAKE-001"
+        self.categorie_id = None
+        self.prix_vente = 1000
+        self.stock_minimum = 0
+        self.description = ""
+        self.actif = actif
+
+
+class _FakeProduitService:
+    def __init__(self) -> None:
+        self.produits = [_FakeProduit(produit_id=1, nom="Produit desactive", actif=0)]
+
+    def lister_categories(self, utilisateur):
+        return []
+
+    def rechercher_produits(self, utilisateur, *, terme="", categorie_id=None, actifs_seulement=False):
+        return self.produits
+
+    def creer_produit(self, utilisateur, payload: ProduitPayload):
+        raise AssertionError("Non utilise")
+
+    def modifier_produit(self, utilisateur, *, produit_id: int, payload: ProduitPayload):
+        raise AssertionError("Non utilise")
+
+    def desactiver_produit(self, utilisateur, *, produit_id: int):
+        raise AssertionError("Non utilise")
+
+    def reactiver_produit(self, utilisateur, *, produit_id: int):
+        self.produits[0].actif = 1
+        return self.produits[0]
