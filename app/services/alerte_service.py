@@ -7,10 +7,13 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.constants import TYPE_ALERTE_EXPIRATION_PROCHE, TYPE_ALERTE_STOCK_FAIBLE
+from app.core.permissions import PERMISSION_CONSULTER_RAPPORTS_GLOBAUX, exiger_permission
+from app.database.connection import create_session
 from app.database.models import Alerte, LotProduit, Produit
 from app.repositories.alerte_repository import AlerteRepository
 from app.repositories.parametre_repository import ParametreRepository
 from app.repositories.stock_repository import StockRepository
+from app.services.auth_service import SessionUtilisateur
 
 
 class AlerteService:
@@ -18,10 +21,12 @@ class AlerteService:
 
     def __init__(
         self,
+        session_factory=create_session,
         alerte_repository: AlerteRepository | None = None,
         stock_repository: StockRepository | None = None,
         parametre_repository: ParametreRepository | None = None,
     ) -> None:
+        self._session_factory = session_factory
         self._alerte_repository = alerte_repository or AlerteRepository()
         self._stock_repository = stock_repository or StockRepository()
         self._parametre_repository = parametre_repository or ParametreRepository()
@@ -40,6 +45,22 @@ class AlerteService:
         alertes.extend(self._generer_alerte_stock_faible(session, produit=produit, date_reference=reference))
         alertes.extend(self._generer_alerte_expiration(session, produit=produit, lot=lot, date_reference=reference))
         return alertes
+
+    def lister_alertes(self, utilisateur: SessionUtilisateur, *, non_lues_seulement: bool = False) -> list[Alerte]:
+        """Retourne les alertes visibles par le gerant."""
+        exiger_permission(utilisateur.role, PERMISSION_CONSULTER_RAPPORTS_GLOBAUX)
+        with self._session_factory() as session:
+            return self._alerte_repository.lister(session, non_lues_seulement=non_lues_seulement)
+
+    def marquer_lue(self, utilisateur: SessionUtilisateur, *, alerte_id: int) -> None:
+        """Marque une alerte comme lue, operation reservee au gerant."""
+        exiger_permission(utilisateur.role, PERMISSION_CONSULTER_RAPPORTS_GLOBAUX)
+        with self._session_factory() as session:
+            alerte = self._alerte_repository.chercher_par_id(session, alerte_id)
+            if alerte is None:
+                return
+            self._alerte_repository.marquer_lue(session, alerte)
+            session.commit()
 
     def _generer_alerte_stock_faible(
         self,

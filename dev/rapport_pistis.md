@@ -920,3 +920,74 @@ Build PyInstaller reussi, executable genere : dist\SALMOSPHARM\SALMOSPHARM.exe
 - L'impression reelle 58 mm / 80 mm doit etre testee avec une imprimante thermique Windows configuree dans les parametres.
 - La reimpression depuis un historique de ventes sera finalisee avec la Phase 17, quand les ecrans d'historique existeront.
 - L'impression ESC/POS avancee reste limitee au flux texte brut Windows pour garder l'application locale et testable sans imprimante pendant le developpement.
+
+## Phase 17 - Historique des ventes, rapports et alertes
+
+### Perimetre implemente
+
+- Ajout de `RapportService` pour calculer les historiques et rapports depuis les tables existantes, sans table `rapports`.
+- Historique gerant : consultation de toutes les ventes validees, recherche par numero ou vendeur, ouverture du ticket associe.
+- Historique vendeur : consultation limitee a ses propres ventes par verification service.
+- Rapports gerant : ventes du jour, ventes du mois, panier moyen, rapport par vendeur et produits les plus vendus.
+- Alertes gerant : liste des alertes stock/expiration et marquage comme lue.
+- Remplacement des placeholders `Rapports`, `Alertes`, `Historique`, `Ventes` et `Historique des ventes` par des pages connectees.
+- Les tickets restent generes depuis les ventes via `TicketService`, jamais depuis une table `factures`.
+
+### Fichiers principaux
+
+- `app/services/rapport_service.py`
+- `app/services/alerte_service.py`
+- `app/repositories/alerte_repository.py`
+- `app/ui/gerant/historique/`
+- `app/ui/vendeur/historique_ventes/`
+- `app/ui/gerant/rapports/`
+- `app/ui/gerant/alertes/`
+- `app/ui/layouts/main_layout.py`
+- `tests/test_rapport_service.py`
+- `tests/test_main_window.py`
+- `dev/rapport_pistis.md`
+
+### Validation executee
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_rapport_service.py tests/test_main_window.py tests/test_ticket_service.py tests/test_vente_service.py
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\pyinstaller.exe app/main.py --name SALMOSPHARM --windowed --onedir --icon app/assets/logo.ico --add-data "app/assets;assets" --noconfirm
+```
+
+Resultats :
+
+```txt
+40 passed
+88 passed
+Build PyInstaller reussi, executable genere : dist\SALMOSPHARM\SALMOSPHARM.exe
+```
+
+### Limites restantes
+
+- Les filtres date avances restent minimalistes cote UI ; la couche service les supporte deja.
+- Les graphiques visuels ne sont pas ajoutes : la phase valide des rapports calcules sous forme de tableaux denses et lisibles.
+
+## Correction UI Phase 17 - Alignement maquettes rapports/historiques
+
+### Perimetre corrige
+
+- `Rapports` adopte une structure proche de la maquette fournie : titre `Rapports et statistiques`, actions de periode/export, cartes metriques, graphique en barres, graphique donut et tableau de performance vendeurs.
+- Les graphiques sont dessines en PySide natif avec `QPainter`; aucune dependance graphique supplementaire n'a ete ajoutee.
+- Le menu gerant `Historique` affiche maintenant le journal des actions systeme, avec filtres visuels, table d'actions et resume lateral.
+- Le menu gerant `Ventes` conserve l'historique des ventes validees et l'ouverture des tickets.
+- Ajout d'un test service pour verifier que le gerant peut consulter le journal d'actions et que le vendeur est refuse.
+
+### Validation executee
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_rapport_service.py tests/test_main_window.py
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultats :
+
+```txt
+28 passed
+89 passed
+```

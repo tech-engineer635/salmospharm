@@ -12,10 +12,12 @@ from app.services.produit_service import ProduitPayload
 from app.services.vente_service import ProduitVendable
 from app.services.utilisateur_service import VendeurDashboardData, VendeurListItem, VendeurMetrics
 from app.ui.gerant.produits import ProduitsPage
+from app.ui.gerant.rapports import RapportsPage
 from app.ui.gerant.stock import StockPage
 from app.ui.gerant.vendeurs import VendeursPage
 from app.ui.layouts.sidebar import Sidebar
 from app.ui.vendeur.nouvelle_vente import NouvelleVentePage
+from app.ui.vendeur.historique_ventes import HistoriqueVentesVendeurPage
 
 
 def _app() -> QApplication:
@@ -171,6 +173,21 @@ def test_navigation_gerant_vendeurs_ouvre_page_gestion_vendeurs():
     assert window.content_stack.currentIndex() == window._pages["dashboard"]
 
     window.close()
+    app.processEvents()
+
+
+def test_navigation_phase17_pages_remplacent_placeholders():
+    app = _app()
+    gerant_window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
+    vendeur_window = MainWindow(session_utilisateur=_session(ROLE_VENDEUR))
+
+    assert isinstance(gerant_window._page_widgets["rapports"], RapportsPage)
+    assert gerant_window._page_widgets["alertes"].objectName() == "alertsPage"
+    assert gerant_window._page_widgets["historique"].objectName() == "actionHistoryPage"
+    assert isinstance(vendeur_window._page_widgets["historique_ventes"], HistoriqueVentesVendeurPage)
+
+    gerant_window.close()
+    vendeur_window.close()
     app.processEvents()
 
 

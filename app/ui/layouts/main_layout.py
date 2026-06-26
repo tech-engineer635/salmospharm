@@ -23,13 +23,17 @@ from PySide6.QtWidgets import (
 from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
 from app.services.auth_service import SessionUtilisateur
 from app.ui.components.ticket_preview import TicketPreviewPage
+from app.ui.gerant.alertes import AlertesPage
 from app.ui.gerant.dashboard_page import GerantDashboardPage
+from app.ui.gerant.historique import HistoriqueActionsPage, HistoriqueVentesGerantPage
 from app.ui.gerant.produits import ProduitsPage
+from app.ui.gerant.rapports import RapportsPage
 from app.ui.gerant.stock import StockPage
 from app.ui.gerant.vendeurs import VendeursPage
 from app.ui.layouts.sidebar import Sidebar
 from app.ui.layouts.topbar import Topbar
 from app.ui.vendeur.dashboard_page import VendeurDashboardPage
+from app.ui.vendeur.historique_ventes import HistoriqueVentesVendeurPage
 from app.ui.vendeur.nouvelle_vente import NouvelleVentePage
 
 
@@ -114,8 +118,13 @@ class MainWindow(QMainWindow):
             facture_page.retour_demande.connect(lambda: self.navigate("dashboard"))
             self._add_page("factures", facture_page)
             self._add_page("vendeurs", VendeursPage(self.session_utilisateur, autoload=False))
-            for key in ("ventes", "rapports", "historique", "alertes"):
-                self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
+            ventes_page = HistoriqueVentesGerantPage(self.session_utilisateur, autoload=False)
+            ventes_page.ticket_demande.connect(self._afficher_ticket)
+            historique = HistoriqueActionsPage(self.session_utilisateur, autoload=False)
+            self._add_page("ventes", ventes_page)
+            self._add_page("historique", historique)
+            self._add_page("rapports", RapportsPage(self.session_utilisateur, autoload=False))
+            self._add_page("alertes", AlertesPage(self.session_utilisateur, autoload=False))
             self._add_page("parametres", SettingsPage(self.set_theme))
             for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
@@ -131,7 +140,10 @@ class MainWindow(QMainWindow):
             facture_page = TicketPreviewPage(self.session_utilisateur)
             facture_page.retour_demande.connect(lambda: self.navigate("nouvelle_vente"))
             self._add_page("factures", facture_page)
-            for key in ("historique_ventes", "produits"):
+            historique = HistoriqueVentesVendeurPage(self.session_utilisateur, autoload=False)
+            historique.ticket_demande.connect(self._afficher_ticket)
+            self._add_page("historique_ventes", historique)
+            for key in ("produits",):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             self._add_page("details_ventes_recentes", PlaceholderPage(_page_title("details_ventes_recentes"), _placeholder_text("details_ventes_recentes")))
 
@@ -147,6 +159,8 @@ class MainWindow(QMainWindow):
             layout.setContentsMargins(24, 8, 22, 8)
         elif key == "nouvelle_vente":
             layout.setContentsMargins(24, 10, 22, 10)
+        elif key in {"ventes", "historique", "historique_ventes", "rapports", "alertes", "factures"}:
+            layout.setContentsMargins(24, 14, 22, 14)
         elif key in {"produits", "stock"}:
             layout.setContentsMargins(26, 18, 22, 18)
         else:
@@ -848,6 +862,101 @@ class MainWindow(QMainWindow):
                 color: #073264;
                 font-size: 19px;
                 font-weight: 900;
+            }
+            QWidget#reportsPage,
+            QWidget#historyPage,
+            QWidget#alertsPage {
+                background-color: #fbfdff;
+            }
+            QLabel#reportsTitle {
+                color: #073264;
+                font-size: 25px;
+                font-weight: 900;
+            }
+            QLabel#reportsSubtitle {
+                color: #31547a;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QLineEdit#reportsSearch {
+                min-width: 360px;
+                max-width: 480px;
+                min-height: 38px;
+            }
+            QLineEdit#dateFilterInput {
+                min-width: 130px;
+                max-width: 150px;
+                min-height: 38px;
+            }
+            QPushButton#reportTab,
+            QPushButton#reportTabActive {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 8px;
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 38px;
+                padding: 0 22px;
+            }
+            QPushButton#reportTabActive {
+                background-color: #108d38;
+                border-color: #108d38;
+                color: #ffffff;
+            }
+            QLabel#filterPill {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 7px;
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 38px;
+                padding: 0 14px;
+            }
+            QFrame#reportsPanel,
+            QFrame#reportMetric {
+                background-color: #ffffff;
+                border: 1px solid #edf1f4;
+                border-radius: 10px;
+            }
+            QLabel#reportMetricIcon {
+                background-color: #18a640;
+                border-radius: 25px;
+            }
+            QLabel#reportsPanelTitle {
+                color: #073264;
+                font-size: 16px;
+                font-weight: 900;
+            }
+            QLabel#reportMetricTitle {
+                color: #31547a;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QLabel#reportMetricValue {
+                color: #073264;
+                font-size: 22px;
+                font-weight: 900;
+            }
+            QLabel#reportMetricSubtitle {
+                color: #108d38;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QTableWidget#reportsTable {
+                background-color: #ffffff;
+                border: none;
+                color: #073264;
+                gridline-color: #edf1f4;
+                selection-background-color: #edf9f0;
+                selection-color: #10243b;
+            }
+            QLabel#actionSummaryRow {
+                color: #073264;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 30px;
             }
             QWidget#vendorsPage {
                 background-color: #fbfdff;

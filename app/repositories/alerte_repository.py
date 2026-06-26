@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database.models import Alerte
 
@@ -32,9 +32,17 @@ class AlerteRepository:
     def lister_non_lues(self, session: Session) -> list[Alerte]:
         statement = (
             select(Alerte)
+            .options(selectinload(Alerte.produit), selectinload(Alerte.lot))
             .where(Alerte.est_lue == 0)
             .order_by(Alerte.cree_le.desc(), Alerte.id.desc())
         )
+        return list(session.execute(statement).scalars().all())
+
+    def lister(self, session: Session, *, non_lues_seulement: bool = False, limit: int = 100) -> list[Alerte]:
+        statement = select(Alerte).options(selectinload(Alerte.produit), selectinload(Alerte.lot))
+        if non_lues_seulement:
+            statement = statement.where(Alerte.est_lue == 0)
+        statement = statement.order_by(Alerte.cree_le.desc(), Alerte.id.desc()).limit(limit)
         return list(session.execute(statement).scalars().all())
 
     def creer(self, session: Session, alerte: Alerte) -> Alerte:
