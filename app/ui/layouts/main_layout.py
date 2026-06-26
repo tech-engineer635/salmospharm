@@ -694,6 +694,12 @@ class MainWindow(QMainWindow):
                 min-height: 36px;
                 padding: 0 14px;
             }
+            QLabel#paymentHint {
+                color: #31547a;
+                font-size: 12px;
+                font-weight: 700;
+                min-height: 16px;
+            }
             QLabel#saleEmpty {
                 color: #64748b;
                 font-size: 13px;

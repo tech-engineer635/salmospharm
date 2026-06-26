@@ -806,3 +806,35 @@ Resultats :
 
 - Aucun envoi d'email n'est implemente : l'application doit fonctionner sans Internet obligatoire.
 - Le telephone vendeur necessiterait une evolution validee du schema officiel avant persistance.
+
+## Correctif UX - Encaissement nouvelle vente
+
+### Perimetre corrige
+
+- Le bouton `Encaisser` n'est plus percu comme inactif apres ajout au panier.
+- Le champ `Montant recu` est pre-rempli avec le total du panier pour permettre un encaissement exact rapide.
+- Ajout d'un message d'aide sous le montant recu :
+  - panier vide ;
+  - montant recu inferieur au total ;
+  - pret a encaisser.
+- Le bouton reste accessible des qu'un panier existe ; si le montant est insuffisant, l'interface affiche un message clair au lieu de rester silencieuse.
+- Message de produit vendable vide clarifie : il faut un produit actif avec un lot non expire et du stock.
+- Le test de non-scroll plein ecran de `Nouvelle vente` reste valide apres ajout du message d'aide.
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_main_window.py::test_page_nouvelle_vente_panier_total_et_accessibilite_encaissement tests/test_main_window.py::test_page_nouvelle_vente_ne_scrolle_pas_en_plein_ecran
+.\.venv\Scripts\python.exe -m pytest tests/test_main_window.py::test_page_nouvelle_vente_ne_scrolle_pas_en_plein_ecran
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultats :
+
+```txt
+1 passed, puis correction spacing
+1 passed
+77 passed
+```

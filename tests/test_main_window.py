@@ -225,12 +225,15 @@ def test_page_nouvelle_vente_panier_total_et_accessibilite_encaissement():
 
     assert page.total_label.text() == "1 000 CDF"
     assert page.items_count_label.text() == "1 article(s)"
-    assert not page.cash_button.isEnabled()
+    assert page.received_input.value() == 1000
+    assert page.cash_button.isEnabled()
+    assert "Pret a encaisser" in page.payment_hint_label.text()
 
-    page.received_input.setValue(1000)
+    page.received_input.setValue(500)
     app.processEvents()
 
     assert page.cash_button.isEnabled()
+    assert "inferieur" in page.payment_hint_label.text()
 
     page.close()
     app.processEvents()

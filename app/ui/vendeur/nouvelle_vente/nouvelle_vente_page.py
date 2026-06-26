@@ -165,8 +165,8 @@ class NouvelleVentePage(QWidget):
         panel.setObjectName("salePanel")
         panel.setFixedWidth(340)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(20, 14, 20, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setSpacing(6)
 
         title_row = QHBoxLayout()
         title_icon = QLabel()
@@ -208,6 +208,10 @@ class NouvelleVentePage(QWidget):
         self.received_input.setSuffix(" CDF")
         self.received_input.valueChanged.connect(self._maj_resume)
         layout.addLayout(_field_group("Montant recu *", self.received_input))
+        self.payment_hint_label = QLabel("Ajoutez un produit au panier pour encaisser.")
+        self.payment_hint_label.setObjectName("paymentHint")
+        self.payment_hint_label.setWordWrap(True)
+        layout.addWidget(self.payment_hint_label)
 
         self.change_label = _summary_value("0 CDF")
         layout.addLayout(_summary_row("Monnaie", self.change_label))
@@ -289,8 +293,9 @@ class NouvelleVentePage(QWidget):
     def _remplir_produits(self) -> None:
         _clear_layout(self.products_grid)
         if not self._produits:
-            empty = QLabel("Aucun produit vendable trouve.")
+            empty = QLabel("Aucun produit vendable trouve. Verifiez que le produit est actif et qu'un lot non expire contient du stock.")
             empty.setObjectName("saleEmpty")
+            empty.setWordWrap(True)
             self.products_grid.addWidget(empty, 0, 0)
             return
         for index, produit in enumerate(self._produits[:8]):
@@ -329,6 +334,7 @@ class NouvelleVentePage(QWidget):
 
     def _remplir_panier(self) -> None:
         _clear_layout(self.cart_rows)
+        previous_total = int(self.total_label.text().replace(" CDF", "").replace(" ", "")) if hasattr(self, "total_label") else 0
         for line in self._cart.values():
             row = CartRow(line)
             row.minus_button.clicked.connect(lambda checked=False, item=line: self._changer_quantite(item.produit.produit_id, item.quantite - 1))
@@ -339,6 +345,9 @@ class NouvelleVentePage(QWidget):
             empty = QLabel("Le panier est vide.")
             empty.setObjectName("saleEmpty")
             self.cart_rows.addWidget(empty)
+        total = sum(line.sous_total for line in self._cart.values())
+        if total > 0 and self.received_input.value() <= previous_total:
+            self.received_input.setValue(total)
         self._maj_resume()
 
     def _maj_resume(self) -> None:
@@ -348,10 +357,24 @@ class NouvelleVentePage(QWidget):
         self.total_label.setText(_format_cdf(total))
         self.items_count_label.setText(f"{count} article(s)")
         self.change_label.setText(_format_cdf(max(0, self.received_input.value() - total)))
-        self.cash_button.setEnabled(total > 0 and self.received_input.value() >= total)
+        if total <= 0:
+            self.payment_hint_label.setText("Ajoutez un produit au panier pour encaisser.")
+        elif self.received_input.value() < total:
+            self.payment_hint_label.setText("Le montant recu est inferieur au total a payer.")
+        else:
+            self.payment_hint_label.setText("Pret a encaisser en especes.")
+        self.cash_button.setEnabled(total > 0)
         self.clear_button.setEnabled(bool(self._cart))
 
     def _encaisser(self) -> None:
+        total = sum(line.sous_total for line in self._cart.values())
+        if total <= 0:
+            self._afficher_erreur("Le panier est vide.")
+            return
+        if self.received_input.value() < total:
+            self.received_input.setFocus()
+            self._afficher_erreur("Le montant recu est insuffisant.")
+            return
         try:
             result = self._vente_service.valider_vente(
                 self.session_utilisateur,
