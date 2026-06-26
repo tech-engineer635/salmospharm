@@ -838,3 +838,38 @@ Resultats :
 1 passed
 77 passed
 ```
+
+## Stabilisation phases 10 a 15
+
+### Perimetre corrige
+
+- Alignement du menu vendeur avec la documentation : l'entree `Produits` devient `Recherche produit` pour le vendeur, sans changer la navigation `Produits` du gerant.
+- Le titre de page vendeur suit le meme libelle `Recherche produit`.
+- Renforcement de `VenteService.valider_vente()` : le service confirme en base que l'utilisateur connecte est encore actif avant de creer la vente, les lignes, les mouvements de stock ou le journal.
+- Ajout d'un test de vente pour refuser un vendeur desactive et verifier que la tentative reste atomique.
+- Decision explicite : l'apercu et l'impression du ticket restent visibles comme fonctionnalite attendue mais sont reportes a la Phase 16, dediee aux tickets et a l'impression thermique.
+
+### Validation executee
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_vente_service.py tests/test_main_window.py
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\pyinstaller.exe app/main.py --name SALMOSPHARM --windowed --onedir --icon app/assets/logo.ico --add-data "app/assets;assets" --noconfirm
+```
+
+Resultats :
+
+```txt
+30 passed
+78 passed
+Build PyInstaller reussi, executable genere : dist\SALMOSPHARM\SALMOSPHARM.exe
+```
+
+### Test manuel recommande
+
+1. Lancer `python app/main.py`.
+2. Se connecter avec un vendeur actif.
+3. Verifier que le menu affiche `Recherche produit`.
+4. Aller dans `Nouvelle vente`, ajouter un produit actif avec lot non expire et stock disponible.
+5. Cliquer sur `Encaisser`.
+6. Verifier que la vente est validee, que le stock diminue et que l'absence de ticket/impression reste attendue jusqu'a la Phase 16.

@@ -37,7 +37,7 @@ MENU_VENDEUR: tuple[NavigationItem, ...] = (
     NavigationItem("dashboard", "Tableau de bord"),
     NavigationItem("nouvelle_vente", "Nouvelle vente"),
     NavigationItem("historique_ventes", "Historique des ventes"),
-    NavigationItem("produits", "Produits"),
+    NavigationItem("produits", "Recherche produit"),
     NavigationItem("factures", "Factures"),
 )
 

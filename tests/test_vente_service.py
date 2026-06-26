@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.constants import ACTION_VENTE_VALIDEE, ROLE_GERANT, ROLE_VENDEUR, TYPE_MOUVEMENT_SORTIE
-from app.core.exceptions import PermissionRefuseeError, ProduitInactifError, StockInsuffisantError, ValidationError
+from app.core.exceptions import PermissionRefuseeError, ProduitInactifError, StockInsuffisantError, UtilisateurInactifError, ValidationError
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
 from app.database.models import JournalActivite, LigneVente, LotProduit, MouvementStock, Produit, Utilisateur, Vente
@@ -189,6 +189,32 @@ def test_valider_vente_refuse_role_sans_permission(tmp_path):
     engine.dispose()
 
 
+def test_valider_vente_refuse_vendeur_desactive_et_reste_atomique(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    vendeur = _creer_utilisateur(SessionLocal, ROLE_VENDEUR, actif=0)
+    produit_id = _creer_produit(SessionLocal, nom="Produit vendable", prix_vente=1000)
+    lot_id = _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-A", quantite=3, date_expiration="2026-08-01")
+    service = VenteService(session_factory=SessionLocal)
+
+    with pytest.raises(UtilisateurInactifError):
+        service.valider_vente(
+            vendeur,
+            VentePayload(lignes=[LignePanierPayload(produit_id=produit_id, quantite=1)], montant_recu=1_000),
+            date_reference=date(2026, 6, 26),
+        )
+
+    with SessionLocal() as session:
+        lot = session.get(LotProduit, lot_id)
+        ventes = session.execute(select(func.count(Vente.id))).scalar_one()
+        mouvements = session.execute(select(func.count(MouvementStock.id))).scalar_one()
+
+    engine.dispose()
+
+    assert lot.quantite == 3
+    assert ventes == 0
+    assert mouvements == 0
+
+
 def test_lister_produits_vendables_exclut_stock_expire_ou_vide(tmp_path):
     engine, SessionLocal = _create_test_session_factory(tmp_path)
     vendeur = _creer_utilisateur(SessionLocal, ROLE_VENDEUR)
@@ -220,14 +246,14 @@ def _create_test_session_factory(tmp_path):
     )
 
 
-def _creer_utilisateur(SessionLocal, role: str) -> SessionUtilisateur:
+def _creer_utilisateur(SessionLocal, role: str, *, actif: int = 1) -> SessionUtilisateur:
     with SessionLocal() as session:
         utilisateur = Utilisateur(
             nom=f"Utilisateur {role}",
             email=f"{role.lower()}-vente@test.local",
             mot_de_passe_hash="hash",
             role=role,
-            actif=1,
+            actif=actif,
         )
         session.add(utilisateur)
         session.commit()

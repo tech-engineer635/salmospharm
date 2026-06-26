@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import ACTION_VENTE_VALIDEE, STATUT_VENTE_VALIDEE, TYPE_MOUVEMENT_SORTIE
-from app.core.exceptions import ProduitInactifError, SalmospharmError, StockInsuffisantError, ValidationError
+from app.core.exceptions import ProduitInactifError, SalmospharmError, StockInsuffisantError, UtilisateurInactifError, ValidationError
 from app.core.permissions import PERMISSION_CREER_VENTE, PERMISSION_RECHERCHER_PRODUITS, exiger_permission
 from app.database.connection import create_session
 from app.database.models import LigneVente, MouvementStock, Vente
@@ -18,6 +18,7 @@ from app.repositories.categorie_repository import CategorieRepository
 from app.repositories.lot_produit_repository import LotProduitRepository
 from app.repositories.produit_repository import ProduitRepository
 from app.repositories.stock_repository import StockRepository
+from app.repositories.utilisateur_repository import UtilisateurRepository
 from app.repositories.vente_repository import VenteRepository
 from app.services.alerte_service import AlerteService
 from app.services.auth_service import SessionUtilisateur
@@ -100,6 +101,7 @@ class VenteService:
         categorie_repository: CategorieRepository | None = None,
         lot_repository: LotProduitRepository | None = None,
         stock_repository: StockRepository | None = None,
+        utilisateur_repository: UtilisateurRepository | None = None,
         vente_repository: VenteRepository | None = None,
         alerte_service: AlerteService | None = None,
         journal_service: JournalService | None = None,
@@ -109,6 +111,7 @@ class VenteService:
         self._categorie_repository = categorie_repository or CategorieRepository()
         self._lot_repository = lot_repository or LotProduitRepository()
         self._stock_repository = stock_repository or StockRepository()
+        self._utilisateur_repository = utilisateur_repository or UtilisateurRepository()
         self._vente_repository = vente_repository or VenteRepository()
         self._alerte_service = alerte_service or AlerteService(stock_repository=self._stock_repository)
         self._journal_service = journal_service or JournalService()
@@ -173,6 +176,7 @@ class VenteService:
 
         reference = date_reference or date.today()
         with self._session_factory() as session:
+            self._exiger_utilisateur_actif(session, utilisateur)
             try:
                 plan = self._preparer_plan(session, lignes_groupees, reference)
                 total = sum(item.prix_unitaire * item.quantite for item in plan)
@@ -268,6 +272,12 @@ class VenteService:
             except IntegrityError as exc:
                 session.rollback()
                 raise ValidationError("Impossible de valider la vente.") from exc
+
+    def _exiger_utilisateur_actif(self, session: Session, utilisateur: SessionUtilisateur) -> None:
+        """Confirme en base que la session peut encore valider une vente."""
+        utilisateur_db = self._utilisateur_repository.chercher_par_id(session, utilisateur.utilisateur_id)
+        if utilisateur_db is None or utilisateur_db.actif != 1:
+            raise UtilisateurInactifError("Ce compte est desactive. Veuillez contacter le gerant.")
 
     def _preparer_plan(
         self,

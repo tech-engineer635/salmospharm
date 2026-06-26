@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
             self.sidebar.show()
         self.content_stack.setCurrentIndex(self._pages[key])
         self.sidebar.set_active(key)
-        self.topbar.set_title(_page_title(key))
+        self.topbar.set_title(self._page_title_for_session(key))
         page = self._page_widgets.get(key)
         if page is not None and hasattr(page, "on_show"):
             page.on_show()
@@ -152,6 +152,11 @@ class MainWindow(QMainWindow):
         self.setProperty("theme", self._theme)
         self.style().unpolish(self)
         self.style().polish(self)
+
+    def _page_title_for_session(self, key: str) -> str:
+        if self.session_utilisateur.role == ROLE_VENDEUR and key == "produits":
+            return "Recherche produit"
+        return _page_title(key)
 
     def _apply_style(self) -> None:
         self.setStyleSheet(

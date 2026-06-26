@@ -387,13 +387,16 @@ def test_vendeur_ne_voit_pas_menus_gerant_et_voit_menus_vendeur():
         "Tableau de bord",
         "Nouvelle vente",
         "Historique des ventes",
-        "Produits",
+        "Recherche produit",
         "Factures",
         "Deconnexion",
     ):
         assert label in labels
     for forbidden in ("Stock", "Ventes", "Rapports", "Vendeurs", "Historique", "Alertes", "Parametres"):
         assert forbidden not in labels
+
+    window.navigate("produits")
+    assert window.topbar.title_label.text() == "Recherche produit"
 
     window.close()
     app.processEvents()
