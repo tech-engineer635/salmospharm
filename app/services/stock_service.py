@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import ACTION_STOCK_AJUSTE, ACTION_STOCK_ENTREE, TYPE_MOUVEMENT_AJUSTEMENT, TYPE_MOUVEMENT_ENTREE
-from app.core.exceptions import ProduitInactifError, ValidationError
+from app.core.exceptions import ProduitInactifError, StockInsuffisantError, ValidationError
 from app.core.permissions import (
     PERMISSION_AJUSTER_STOCK,
     PERMISSION_CONSULTER_STOCK,
@@ -51,6 +51,15 @@ class StockOperationResult:
     alertes_creees: int
 
 
+@dataclass(frozen=True)
+class LotFefoSelection:
+    lot_id: int
+    produit_id: int
+    quantite: int
+    numero_lot: str | None
+    date_expiration: str | None
+
+
 class StockService:
     """Porte les regles de stock sans laisser l'UI modifier les lots directement."""
 
@@ -79,6 +88,59 @@ class StockService:
         exiger_permission(utilisateur.role, PERMISSION_CONSULTER_STOCK)
         with self._session_factory() as session:
             return self._stock_repository.lister_mouvements_recents(session, limit)
+
+    def choisir_lots_fefo(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        produit_id: int,
+        quantite_demandee: int,
+        date_reference: date | None = None,
+    ) -> list[LotFefoSelection]:
+        """Selectionne les lots vendables sans les decrementer.
+
+        Cette methode prepare la future vente : elle exclut les lots expires ou
+        vides, respecte les produits actifs et repartit la quantite demandee
+        du lot qui expire le plus tot vers le plus lointain.
+        """
+        exiger_permission(utilisateur.role, PERMISSION_CONSULTER_STOCK)
+        if not isinstance(quantite_demandee, int) or quantite_demandee <= 0:
+            raise ValidationError("La quantite demandee doit etre superieure a zero.")
+
+        reference = date_reference or date.today()
+        with self._session_factory() as session:
+            produit = self._produit_repository.chercher_par_id(session, produit_id)
+            if produit is None:
+                raise ValidationError("Produit introuvable.")
+            if produit.actif != 1:
+                raise ProduitInactifError("Ce produit est desactive et ne peut pas etre vendu.")
+
+            lots = self._lot_repository.lister_disponibles_par_produit(
+                session,
+                produit_id=produit_id,
+                date_reference=reference.isoformat(),
+            )
+            selections: list[LotFefoSelection] = []
+            reste = quantite_demandee
+
+            for lot in lots:
+                if reste <= 0:
+                    break
+                quantite_prise = min(lot.quantite, reste)
+                selections.append(
+                    LotFefoSelection(
+                        lot_id=lot.id,
+                        produit_id=lot.produit_id,
+                        quantite=quantite_prise,
+                        numero_lot=lot.numero_lot,
+                        date_expiration=lot.date_expiration,
+                    )
+                )
+                reste -= quantite_prise
+
+            if reste > 0:
+                raise StockInsuffisantError("Stock insuffisant pour ce produit.")
+            return selections
 
     def entrer_stock(self, utilisateur: SessionUtilisateur, payload: EntreeStockPayload) -> StockOperationResult:
         exiger_permission(utilisateur.role, PERMISSION_ENTRER_STOCK)

@@ -33,6 +33,15 @@ class UtilisateurRepository:
         statement = select(Utilisateur).where(Utilisateur.role == role).order_by(Utilisateur.nom.asc())
         return list(session.execute(statement).scalars().all())
 
+    def rechercher_par_role(self, session: Session, *, role: str, terme: str = "") -> list[Utilisateur]:
+        statement = select(Utilisateur).where(Utilisateur.role == role)
+        terme_normalise = terme.strip()
+        if terme_normalise:
+            motif = f"%{terme_normalise}%"
+            statement = statement.where(Utilisateur.nom.ilike(motif) | Utilisateur.email.ilike(motif))
+        statement = statement.order_by(Utilisateur.nom.asc())
+        return list(session.execute(statement).scalars().all())
+
     def lister_actifs(self, session: Session) -> list[Utilisateur]:
         statement = select(Utilisateur).where(Utilisateur.actif == 1).order_by(Utilisateur.nom.asc())
         return list(session.execute(statement).scalars().all())
@@ -44,5 +53,10 @@ class UtilisateurRepository:
 
     def desactiver(self, session: Session, utilisateur: Utilisateur) -> Utilisateur:
         utilisateur.actif = 0
+        session.flush()
+        return utilisateur
+
+    def reactiver(self, session: Session, utilisateur: Utilisateur) -> Utilisateur:
+        utilisateur.actif = 1
         session.flush()
         return utilisateur

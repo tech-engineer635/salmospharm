@@ -25,9 +25,11 @@ from app.services.auth_service import SessionUtilisateur
 from app.ui.gerant.dashboard_page import GerantDashboardPage
 from app.ui.gerant.produits import ProduitsPage
 from app.ui.gerant.stock import StockPage
+from app.ui.gerant.vendeurs import VendeursPage
 from app.ui.layouts.sidebar import Sidebar
 from app.ui.layouts.topbar import Topbar
 from app.ui.vendeur.dashboard_page import VendeurDashboardPage
+from app.ui.vendeur.nouvelle_vente import NouvelleVentePage
 
 
 APP_TITLE = "SALMOSPHARM 133"
@@ -107,7 +109,8 @@ class MainWindow(QMainWindow):
             self._add_page("dashboard", dashboard)
             self._add_page("produits", ProduitsPage(self.session_utilisateur, autoload=False))
             self._add_page("stock", StockPage(self.session_utilisateur, autoload=False))
-            for key in ("ventes", "factures", "rapports", "vendeurs", "historique", "alertes"):
+            self._add_page("vendeurs", VendeursPage(self.session_utilisateur, autoload=False))
+            for key in ("ventes", "factures", "rapports", "historique", "alertes"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             self._add_page("parametres", SettingsPage(self.set_theme))
             for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
@@ -118,7 +121,8 @@ class MainWindow(QMainWindow):
             dashboard = VendeurDashboardPage(self.session_utilisateur)
             dashboard.voir_tout_demande.connect(self.navigate)
             self._add_page("dashboard", dashboard)
-            for key in ("nouvelle_vente", "historique_ventes", "produits", "factures"):
+            self._add_page("nouvelle_vente", NouvelleVentePage(self.session_utilisateur, autoload=False))
+            for key in ("historique_ventes", "produits", "factures"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             self._add_page("details_ventes_recentes", PlaceholderPage(_page_title("details_ventes_recentes"), _placeholder_text("details_ventes_recentes")))
 
@@ -130,7 +134,11 @@ class MainWindow(QMainWindow):
         container = QWidget()
         container.setObjectName("pageContainer")
         layout = QVBoxLayout(container)
-        if key in {"produits", "stock"}:
+        if key == "vendeurs":
+            layout.setContentsMargins(24, 8, 22, 8)
+        elif key == "nouvelle_vente":
+            layout.setContentsMargins(24, 10, 22, 10)
+        elif key in {"produits", "stock"}:
             layout.setContentsMargins(26, 18, 22, 18)
         else:
             layout.setContentsMargins(28, 26, 28, 26)
@@ -516,6 +524,275 @@ class MainWindow(QMainWindow):
                 min-height: 30px;
                 font-size: 12px;
                 spacing: 8px;
+            }
+            QWidget#salePage {
+                background-color: #fbfdff;
+            }
+            QLabel#saleTitle {
+                color: #073264;
+                font-size: 26px;
+                font-weight: 900;
+            }
+            QLabel#saleSubtitle {
+                color: #31547a;
+                font-size: 14px;
+            }
+            QFrame#salePanel {
+                background-color: #ffffff;
+                border: 1px solid #edf1f4;
+                border-radius: 10px;
+            }
+            QLineEdit#saleSearch {
+                min-width: 560px;
+                max-width: 680px;
+                min-height: 38px;
+                border-radius: 8px;
+                padding-left: 4px;
+            }
+            QWidget#salePage QPushButton#primaryButton,
+            QWidget#salePage QPushButton#outlineButton,
+            QWidget#salePage QPushButton#dangerButton,
+            QWidget#salePage QPushButton#successButton {
+                min-height: 32px;
+                font-size: 12px;
+                padding: 0 12px;
+            }
+            QPushButton#categoryChip {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 14px;
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 34px;
+                padding: 0 18px;
+            }
+            QPushButton#categoryChip[active="true"] {
+                background-color: #108d38;
+                border-color: #108d38;
+                color: #ffffff;
+            }
+            QFrame#productSaleCard {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 8px;
+            }
+            QLabel#productThumbnail,
+            QLabel#cartThumb {
+                background-color: #e9f7fb;
+                border: 1px solid #bfe5f2;
+                border-radius: 4px;
+                color: #0b5f8a;
+                font-size: 9px;
+                font-weight: 900;
+            }
+            QLabel#productCardName {
+                color: #073264;
+                font-size: 12px;
+                font-weight: 900;
+            }
+            QLabel#productCardDesc {
+                color: #526173;
+                font-size: 11px;
+            }
+            QLabel#productCardPrice {
+                color: #073264;
+                font-size: 18px;
+                font-weight: 900;
+            }
+            QLabel#productCardStock {
+                color: #0e8d37;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QLabel#salePanelTitle {
+                color: #073264;
+                font-size: 16px;
+                font-weight: 900;
+            }
+            QLabel#cartHeader {
+                color: #0b3567;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QFrame#cartRow {
+                border-top: 1px solid #edf1f4;
+                background-color: #ffffff;
+            }
+            QLabel#cartProductName {
+                color: #073264;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QLabel#cartProductDesc {
+                color: #526173;
+                font-size: 11px;
+            }
+            QLabel#cartValue {
+                color: #073264;
+                font-size: 15px;
+                font-weight: 800;
+            }
+            QPushButton#quantityButton {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                color: #0b3567;
+                font-size: 16px;
+                font-weight: 900;
+            }
+            QLabel#quantityValue {
+                background-color: #ffffff;
+                border-top: 1px solid #dfe8f0;
+                border-bottom: 1px solid #dfe8f0;
+                color: #073264;
+                font-size: 13px;
+                font-weight: 900;
+            }
+            QPushButton#iconDangerButton {
+                background-color: transparent;
+                border: none;
+            }
+            QLabel#cartCount {
+                color: #073264;
+                font-size: 13px;
+                font-weight: 900;
+            }
+            QLabel#summaryLabel {
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QLabel#summaryValue {
+                color: #073264;
+                font-size: 14px;
+                font-weight: 900;
+            }
+            QLabel#summaryCurrency {
+                color: #526173;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QLineEdit#saleAmountInput,
+            QSpinBox#saleAmountInput {
+                min-height: 36px;
+                font-size: 13px;
+            }
+            QFrame#summarySeparator {
+                background-color: #dfe8f0;
+            }
+            QLabel#totalAmount {
+                color: #16943c;
+                font-size: 22px;
+                font-weight: 900;
+            }
+            QLabel#cashInfo {
+                background-color: #e4f1ff;
+                border-radius: 7px;
+                color: #0b3567;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 36px;
+                padding: 0 14px;
+            }
+            QLabel#saleEmpty {
+                color: #64748b;
+                font-size: 13px;
+                padding: 12px 4px;
+            }
+            QWidget#vendorsPage {
+                background-color: #fbfdff;
+            }
+            QLabel#vendorsTitle {
+                color: #073264;
+                font-size: 26px;
+                font-weight: 900;
+            }
+            QLabel#vendorsSubtitle {
+                color: #31547a;
+                font-size: 14px;
+            }
+            QLineEdit#vendorsSearch {
+                min-width: 360px;
+                max-width: 430px;
+                min-height: 36px;
+                border-radius: 8px;
+                padding-left: 4px;
+            }
+            QFrame#vendorMetricCard,
+            QFrame#vendorsPanel {
+                background-color: #ffffff;
+                border: 1px solid #edf1f4;
+                border-radius: 10px;
+            }
+            QLabel#vendorMetricIcon_green {
+                background-color: #16a33a;
+                border-radius: 23px;
+            }
+            QLabel#vendorMetricIcon_blue {
+                background-color: #1f74d8;
+                border-radius: 23px;
+            }
+            QLabel#vendorMetricIcon_red {
+                background-color: #ef4b55;
+                border-radius: 23px;
+            }
+            QLabel#vendorMetricTitle {
+                color: #31547a;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QLabel#vendorMetricValue {
+                color: #073264;
+                font-size: 22px;
+                font-weight: 900;
+            }
+            QLabel#vendorMetricSubtitle {
+                color: #64748b;
+                font-size: 12px;
+            }
+            QLabel#vendorsPanelTitle {
+                color: #073264;
+                font-size: 16px;
+                font-weight: 900;
+            }
+            QTableWidget#vendorsTable {
+                background-color: #ffffff;
+                border: none;
+                color: #24364a;
+                gridline-color: #edf1f4;
+                selection-background-color: #edf9f0;
+                selection-color: #10243b;
+            }
+            QWidget#vendorsPage QPushButton#primaryButton,
+            QWidget#vendorsPage QPushButton#outlineButton,
+            QWidget#vendorsPage QPushButton#blueButton,
+            QWidget#vendorsPage QPushButton#dangerButton,
+            QWidget#vendorsPage QPushButton#successButton {
+                min-height: 36px;
+                font-size: 12px;
+                padding: 0 12px;
+            }
+            QLabel#vendorFormLabel {
+                color: #0b3567;
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QLineEdit#vendorFormInput {
+                min-height: 36px;
+                font-size: 13px;
+            }
+            QLabel#vendorInfo {
+                background-color: #edf9f0;
+                border: 1px solid #cfead8;
+                border-radius: 7px;
+                color: #107133;
+                font-size: 12px;
+                font-weight: 700;
+                padding: 12px;
+            }
+            QLabel#vendorsFooter {
+                color: #64748b;
+                font-size: 12px;
             }
             QScrollArea#stockSideScroll,
             QScrollArea#stockSideScroll QWidget#stockSideContainer {

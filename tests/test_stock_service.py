@@ -15,6 +15,7 @@ from app.core.constants import (
     TYPE_MOUVEMENT_ENTREE,
 )
 from app.core.exceptions import PermissionRefuseeError, ValidationError
+from app.core.exceptions import ProduitInactifError, StockInsuffisantError
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
 from app.database.models import Alerte, JournalActivite, LotProduit, MouvementStock, Produit, Utilisateur
@@ -186,6 +187,117 @@ def test_vendeur_interdit_entree_et_ajustement_stock(tmp_path):
     engine.dispose()
 
 
+def test_fefo_selectionne_lot_expiration_proche_en_premier(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT)
+    produit_id = _creer_produit(SessionLocal, stock_minimum=0)
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-LOINTAIN", quantite=10, date_expiration="2026-12-31")
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-PROCHE", quantite=5, date_expiration="2026-07-01")
+    service = StockService(session_factory=SessionLocal)
+
+    selections = service.choisir_lots_fefo(
+        gerant,
+        produit_id=produit_id,
+        quantite_demandee=8,
+        date_reference=date(2026, 6, 26),
+    )
+
+    engine.dispose()
+
+    assert [(selection.numero_lot, selection.quantite) for selection in selections] == [
+        ("LOT-PROCHE", 5),
+        ("LOT-LOINTAIN", 3),
+    ]
+
+
+def test_fefo_ignore_lot_expire_et_lot_vide(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    vendeur = _creer_utilisateur(SessionLocal, ROLE_VENDEUR)
+    produit_id = _creer_produit(SessionLocal, stock_minimum=0)
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-EXPIRE", quantite=20, date_expiration="2026-06-25")
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-VIDE", quantite=0, date_expiration="2026-07-01")
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-OK", quantite=4, date_expiration="2026-08-01")
+    service = StockService(session_factory=SessionLocal)
+
+    selections = service.choisir_lots_fefo(
+        vendeur,
+        produit_id=produit_id,
+        quantite_demandee=3,
+        date_reference=date(2026, 6, 26),
+    )
+
+    engine.dispose()
+
+    assert [(selection.numero_lot, selection.quantite) for selection in selections] == [("LOT-OK", 3)]
+
+
+def test_fefo_place_lot_sans_expiration_apres_lots_dates(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT)
+    produit_id = _creer_produit(SessionLocal, stock_minimum=0)
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-SANS-DATE", quantite=10, date_expiration=None)
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-DATE", quantite=2, date_expiration="2026-07-15")
+    service = StockService(session_factory=SessionLocal)
+
+    selections = service.choisir_lots_fefo(
+        gerant,
+        produit_id=produit_id,
+        quantite_demandee=5,
+        date_reference=date(2026, 6, 26),
+    )
+
+    engine.dispose()
+
+    assert [(selection.numero_lot, selection.quantite) for selection in selections] == [
+        ("LOT-DATE", 2),
+        ("LOT-SANS-DATE", 3),
+    ]
+
+
+def test_fefo_refuse_stock_insuffisant_et_quantite_invalide(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT)
+    produit_id = _creer_produit(SessionLocal, stock_minimum=0)
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-A", quantite=2, date_expiration="2026-07-01")
+    service = StockService(session_factory=SessionLocal)
+
+    with pytest.raises(StockInsuffisantError):
+        service.choisir_lots_fefo(
+            gerant,
+            produit_id=produit_id,
+            quantite_demandee=3,
+            date_reference=date(2026, 6, 26),
+        )
+
+    with pytest.raises(ValidationError):
+        service.choisir_lots_fefo(
+            gerant,
+            produit_id=produit_id,
+            quantite_demandee=0,
+            date_reference=date(2026, 6, 26),
+        )
+
+    engine.dispose()
+
+
+def test_fefo_refuse_produit_inactif(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT)
+    produit_id = _creer_produit(SessionLocal, stock_minimum=0, actif=0)
+    _creer_lot(SessionLocal, produit_id=produit_id, numero_lot="LOT-A", quantite=5, date_expiration="2026-07-01")
+    service = StockService(session_factory=SessionLocal)
+
+    with pytest.raises(ProduitInactifError):
+        service.choisir_lots_fefo(
+            gerant,
+            produit_id=produit_id,
+            quantite_demandee=1,
+            date_reference=date(2026, 6, 26),
+        )
+
+    engine.dispose()
+
+
 def _create_test_session_factory(tmp_path):
     database_path = tmp_path / "salmospharm.sqlite3"
     engine = create_app_engine(database_path)
@@ -218,15 +330,36 @@ def _creer_utilisateur(SessionLocal, role: str) -> SessionUtilisateur:
         )
 
 
-def _creer_produit(SessionLocal, *, stock_minimum: int) -> int:
+def _creer_produit(SessionLocal, *, stock_minimum: int, actif: int = 1) -> int:
     with SessionLocal() as session:
         produit = Produit(
             nom=f"Produit stock {stock_minimum}",
             code_barres=f"STOCK-{stock_minimum}",
             prix_vente=1500,
             stock_minimum=stock_minimum,
-            actif=1,
+            actif=actif,
         )
         session.add(produit)
         session.commit()
         return produit.id
+
+
+def _creer_lot(
+    SessionLocal,
+    *,
+    produit_id: int,
+    numero_lot: str,
+    quantite: int,
+    date_expiration: str | None,
+) -> int:
+    with SessionLocal() as session:
+        lot = LotProduit(
+            produit_id=produit_id,
+            numero_lot=numero_lot,
+            quantite=quantite,
+            prix_achat=500,
+            date_expiration=date_expiration,
+        )
+        session.add(lot)
+        session.commit()
+        return lot.id

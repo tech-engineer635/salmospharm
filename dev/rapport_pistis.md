@@ -669,3 +669,140 @@ Resultats :
 1 passed
 56 passed
 ```
+
+## Phase 13 - FEFO
+
+### Perimetre implemente
+
+- Ajout de `StockService.choisir_lots_fefo()` pour selectionner les lots vendables sans decrementer le stock.
+- Ajout du resultat `LotFefoSelection`, detache de SQLAlchemy, pour preparer la future validation de vente.
+- Exclusion des lots expires, des lots a quantite 0 et des produits inactifs.
+- Tri FEFO par date d'expiration croissante, avec les lots sans date places apres les lots dates.
+- Repartition automatique de la quantite demandee sur plusieurs lots si necessaire.
+- Refus propre avec `StockInsuffisantError` quand le stock vendable ne couvre pas la demande.
+- Validation de la quantite demandee avant toute selection.
+
+### Fichiers principaux
+
+- `app/services/stock_service.py`
+- `tests/test_stock_service.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_stock_service.py
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultats :
+
+```txt
+10 passed
+61 passed
+```
+
+### Limites restantes
+
+- La methode FEFO ne decremente pas encore les lots ; la sortie effective sera faite dans la phase vente.
+- Les mouvements `SORTIE`, les lignes de vente et la transaction complete restent reserves a la Phase 14.
+
+## Phases 14 et 15 - Vente definitive et interface nouvelle vente
+
+### Perimetre implemente
+
+- Ajout de `VenteService.valider_vente()` pour valider une vente definitive en especes et en CDF.
+- Validation cote service : permission de vente, panier non vide, quantites positives, produits actifs, prix coherents, stock vendable suffisant et montant recu suffisant.
+- Application FEFO dans la transaction de vente, avec exclusion des lots expires ou vides.
+- Creation atomique de `ventes`, `lignes_vente`, mouvements `SORTIE`, alertes de stock/expiration si necessaire et journal `VENTE_VALIDEE`.
+- Ajout de `VenteService.lister_produits_vendables()` pour alimenter l'interface sans exposer les lots a l'UI.
+- Remplacement du placeholder vendeur `Nouvelle vente` par une page PySide6 connectee aux services : recherche, filtres categories, cartes produits, panier, total, montant recu, monnaie et encaissement.
+- Conservation visible mais desactivee de la remise du mockup, car aucune regle metier de remise n'est validee pour la version 1.0.
+- Bouton d'impression laisse visible mais desactive tant que la phase ticket/impression n'est pas branchee.
+- Ajout d'un test UI pour garantir qu'en plein ecran l'encaissement reste accessible sans scroll global.
+
+### Fichiers principaux
+
+- `app/services/vente_service.py`
+- `app/ui/vendeur/nouvelle_vente/nouvelle_vente_page.py`
+- `app/ui/layouts/main_layout.py`
+- `tests/test_vente_service.py`
+- `tests/test_main_window.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_vente_service.py
+.\.venv\Scripts\python.exe -m pytest tests/test_vente_service.py tests/test_main_window.py
+.\.venv\Scripts\python.exe -m pytest tests/test_main_window.py::test_page_nouvelle_vente_ne_scrolle_pas_en_plein_ecran
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultats :
+
+```txt
+7 passed
+26 passed
+1 passed
+71 passed
+```
+
+### Limites restantes
+
+- L'impression ticket/facture n'est pas encore activee ; elle depend de la phase ticket/impression.
+- La remise n'est pas appliquee, car elle n'existe pas dans les regles metier validees.
+- L'historique des ventes et la reimpression restent a brancher dans les phases suivantes.
+
+## Gestion des vendeurs - Ecran gerant
+
+### Perimetre implemente
+
+- Ajout de `UtilisateurService` pour gerer les comptes vendeurs sans acces direct de l'UI a SQLAlchemy.
+- Creation vendeur reservee au gerant, avec mot de passe hashé, code de recuperation hashé et journalisation.
+- Liste des vendeurs avec recherche, statut actif/inactif, derniere connexion connue et ventes du jour.
+- Desactivation et reactivation de vendeur via le service, avec journalisation.
+- Remplacement du placeholder `Vendeurs` par une page PySide6 dans `app/ui/gerant/vendeurs/`.
+- Reprise du design fourni : en-tete, cartes metriques, tableau, panneau d'ajout a droite et actions visibles.
+- Suppression du champ `Role` du formulaire, car cette interface cree uniquement des vendeurs.
+- Omission du champ telephone persistant : la table officielle `utilisateurs` ne contient pas de colonne telephone.
+- Ajout d'un test UI garantissant que le bouton de creation reste accessible sans scroll global en plein ecran.
+
+### Fichiers principaux
+
+- `app/services/utilisateur_service.py`
+- `app/repositories/utilisateur_repository.py`
+- `app/ui/gerant/vendeurs/vendeurs_page.py`
+- `app/ui/layouts/main_layout.py`
+- `tests/test_utilisateur_service.py`
+- `tests/test_main_window.py`
+- `dev/rapport_pistis.md`
+
+### Validation
+
+Commandes executees :
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_utilisateur_service.py
+.\.venv\Scripts\python.exe -m pytest tests/test_utilisateur_service.py tests/test_main_window.py
+.\.venv\Scripts\python.exe -m pytest tests/test_main_window.py::test_page_vendeurs_formulaire_sans_champ_role_et_accessible_plein_ecran
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Resultats :
+
+```txt
+4 passed
+25 passed puis correction spacing
+1 passed
+77 passed
+```
+
+### Limites restantes
+
+- Aucun envoi d'email n'est implemente : l'application doit fonctionner sans Internet obligatoire.
+- Le telephone vendeur necessiterait une evolution validee du schema officiel avant persistance.
