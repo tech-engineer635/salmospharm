@@ -104,7 +104,9 @@ class NouvelleVentePage(QWidget):
     def _build_catalog_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("salePanel")
-        panel.setMinimumHeight(248)
+        # Garde les actions d'encaissement visibles a 900 px, meme avec les
+        # metriques natives legerement plus hautes de Qt Charts/QtAwesome.
+        panel.setMinimumHeight(232)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(10)

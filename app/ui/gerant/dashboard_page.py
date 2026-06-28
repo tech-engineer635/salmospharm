@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from PySide6.QtCore import QPointF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from app.ui.components.charts import SalesLineChart
 from app.ui.components.icons import ui_icon
 
 
@@ -100,48 +100,7 @@ class ChartPanel(QFrame):
         header.addStretch(1)
         header.addWidget(period_button)
         layout.addLayout(header)
-        layout.addWidget(LineChart(labels, values), 1)
-
-
-class LineChart(QWidget):
-    def __init__(self, labels: list[str], values: list[float]) -> None:
-        super().__init__()
-        self.labels = labels
-        self.values = values
-        self.setMinimumHeight(260)
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        left, top, right, bottom = 48, 18, self.width() - 24, self.height() - 38
-        grid_pen = QPen(QColor("#e8eef2"), 1)
-        painter.setPen(grid_pen)
-        for i in range(5):
-            y = top + (bottom - top) * i / 4
-            painter.drawLine(left, int(y), right, int(y))
-        for i, label in enumerate(self.labels):
-            x = left + (right - left) * i / max(1, len(self.labels) - 1)
-            painter.drawLine(int(x), top, int(x), bottom)
-            painter.setPen(QColor("#65758b"))
-            painter.drawText(int(x) - 18, bottom + 24, label)
-            painter.setPen(grid_pen)
-        points = [QPointF(left + (right - left) * i / (len(self.values) - 1), bottom - (bottom - top) * value) for i, value in enumerate(self.values)]
-        fill = QPainterPath(points[0])
-        for point in points[1:]:
-            fill.lineTo(point)
-        fill.lineTo(points[-1].x(), bottom)
-        fill.lineTo(points[0].x(), bottom)
-        fill.closeSubpath()
-        painter.fillPath(fill, QColor(40, 167, 69, 35))
-        path = QPainterPath(points[0])
-        for point in points[1:]:
-            path.lineTo(point)
-        painter.setPen(QPen(QColor("#18a345"), 3))
-        painter.drawPath(path)
-        painter.setBrush(QColor("#18a345"))
-        painter.setPen(Qt.PenStyle.NoPen)
-        for point in points:
-            painter.drawEllipse(point, 5, 5)
+        layout.addWidget(SalesLineChart(labels, values), 1)
 
 
 class ProductsPanel(QFrame):

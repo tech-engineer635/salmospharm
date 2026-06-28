@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from app.services.auth_service import SessionUtilisateur
+from app.ui.components.charts import ProgressDonutChart, SalesLineChart
 from app.ui.components.icons import ui_icon
 
 
@@ -87,47 +87,7 @@ class ChartPanel(QFrame):
         header.addStretch(1)
         header.addWidget(period)
         layout.addLayout(header)
-        layout.addWidget(LineChart(["08h", "10h", "12h", "14h", "16h", "18h", "20h"], [0.05, 0.14, 0.34, 0.46, 0.58, 0.72, 0.84]), 1)
-
-
-class LineChart(QWidget):
-    def __init__(self, labels: list[str], values: list[float]) -> None:
-        super().__init__()
-        self.labels = labels
-        self.values = values
-        self.setMinimumHeight(260)
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        left, top, right, bottom = 56, 18, self.width() - 24, self.height() - 38
-        painter.setPen(QPen(QColor("#e8eef2"), 1))
-        for i in range(5):
-            y = top + (bottom - top) * i / 4
-            painter.drawLine(left, int(y), right, int(y))
-        for i, label in enumerate(self.labels):
-            x = left + (right - left) * i / max(1, len(self.labels) - 1)
-            painter.drawLine(int(x), top, int(x), bottom)
-            painter.setPen(QColor("#65758b"))
-            painter.drawText(int(x) - 14, bottom + 24, label)
-            painter.setPen(QPen(QColor("#e8eef2"), 1))
-        points = [QPointF(left + (right - left) * i / (len(self.values) - 1), bottom - (bottom - top) * value) for i, value in enumerate(self.values)]
-        fill = QPainterPath(points[0])
-        for point in points[1:]:
-            fill.lineTo(point)
-        fill.lineTo(points[-1].x(), bottom)
-        fill.lineTo(points[0].x(), bottom)
-        fill.closeSubpath()
-        painter.fillPath(fill, QColor(40, 167, 69, 35))
-        path = QPainterPath(points[0])
-        for point in points[1:]:
-            path.lineTo(point)
-        painter.setPen(QPen(QColor("#15a348"), 3))
-        painter.drawPath(path)
-        painter.setBrush(QColor("#15a348"))
-        painter.setPen(Qt.PenStyle.NoPen)
-        for point in points:
-            painter.drawEllipse(point, 5, 5)
+        layout.addWidget(SalesLineChart(["08h", "10h", "12h", "14h", "16h", "18h", "20h"], [0.05, 0.14, 0.34, 0.46, 0.58, 0.72, 0.84]), 1)
 
 
 class RecentSalesPanel(QFrame):
@@ -199,27 +159,10 @@ class PerformancePanel(QFrame):
         layout.addWidget(title)
         layout.addWidget(QLabel("Objectif quotidien                                      500 000 CDF"))
         row = QHBoxLayout()
-        row.addWidget(DonutProgress(), 1)
+        row.addWidget(ProgressDonutChart(57), 1)
         details = QVBoxLayout()
         details.addWidget(QLabel("Realise                                      285 500 CDF"))
         details.addWidget(QLabel("Reste a atteindre                         214 500 CDF"))
         row.addLayout(details, 2)
         layout.addLayout(row)
         layout.addWidget(QLabel("Progression                                      57%"))
-
-
-class DonutProgress(QWidget):
-    def __init__(self) -> None:
-        super().__init__()
-        self.setFixedSize(126, 126)
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = self.rect().adjusted(14, 14, -14, -14)
-        painter.setPen(QPen(QColor("#e8edf1"), 12))
-        painter.drawArc(rect, 0, 360 * 16)
-        painter.setPen(QPen(QColor("#16a33a"), 12))
-        painter.drawArc(rect, 90 * 16, -205 * 16)
-        painter.setPen(QColor("#16a33a"))
-        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "57%")

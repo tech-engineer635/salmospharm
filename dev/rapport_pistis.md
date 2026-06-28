@@ -991,3 +991,9 @@ Resultats :
 28 passed
 89 passed
 ```
+## Migration graphique et iconographique
+
+- Les graphiques des tableaux de bord gerant et vendeur ainsi que ceux des rapports utilisent desormais `PySide6.QtCharts`.
+- Les courbes, histogrammes, diagrammes annulaires et anneaux de progression sont centralises dans `app/ui/components/charts.py`.
+- Les icones des ecrans sont harmonisees avec `QtAwesome 1.4.2` via le composant semantique `ui_icon`.
+- Les dessins `QPainter` conserves concernent uniquement les illustrations, fonds et recadrages d'images, pas les graphiques de donnees.

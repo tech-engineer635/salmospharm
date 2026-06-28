@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from app.core.exceptions import AuthentificationError, UtilisateurInactifError, ValidationError
 from app.services.auth_service import AuthService
+from app.ui.components.icons import ui_icon
 
 
 class LoginWindow(QMainWindow):
@@ -180,7 +181,7 @@ class LoginWindow(QMainWindow):
         avatar.setObjectName("avatar")
         avatar.setFixedSize(78, 78)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        avatar.setPixmap(_user_icon("#073a63", 46).pixmap(46, 46))
+        avatar.setPixmap(ui_icon("user", "#073a63", 46).pixmap(46, 46))
         layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignCenter)
 
         title = QLabel("Bienvenue")
@@ -218,7 +219,7 @@ class LoginWindow(QMainWindow):
         layout.addSpacing(24)
         self.login_button = QPushButton("Se connecter")
         self.login_button.setObjectName("loginButton")
-        self.login_button.setIcon(_lock_icon("#ffffff"))
+        self.login_button.setIcon(ui_icon("lock", "#ffffff", 24))
         self.login_button.clicked.connect(self._submit)
         layout.addWidget(self.login_button)
 
@@ -241,7 +242,7 @@ class LoginWindow(QMainWindow):
         icon = QLabel()
         icon.setObjectName("inputIcon")
         icon.setFixedSize(22, 22)
-        pixmap = (_lock_icon("#657282", 20) if password else _user_icon("#657282", 20)).pixmap(20, 20)
+        pixmap = ui_icon("lock" if password else "user", "#657282", 20).pixmap(20, 20)
         icon.setPixmap(pixmap)
         frame_layout.addWidget(icon)
 
@@ -256,7 +257,7 @@ class LoginWindow(QMainWindow):
         if password:
             toggle = QToolButton()
             toggle.setObjectName("passwordToggle")
-            toggle.setIcon(_eye_icon("#657282"))
+            toggle.setIcon(ui_icon("eye", "#657282", 20))
             toggle.clicked.connect(self._toggle_password_visibility)
             frame_layout.addWidget(toggle)
 

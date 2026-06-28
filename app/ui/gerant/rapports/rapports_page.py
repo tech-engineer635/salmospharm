@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.core.exceptions import SalmospharmError
 from app.services.auth_service import SessionUtilisateur
 from app.services.rapport_service import RapportService, RapportSynthese
+from app.ui.components.charts import DonutChart, SalesBarChart
 from app.ui.components.icons import ui_icon
 
 
@@ -73,7 +72,7 @@ class RapportsPage(QWidget):
 
         charts = QHBoxLayout()
         charts.setSpacing(16)
-        self.bar_chart = BarChart()
+        self.bar_chart = SalesBarChart()
         self.donut_chart = DonutChart()
         charts.addWidget(_panel("Evolution des ventes (CDF)", self.bar_chart), 3)
         charts.addWidget(_panel("Repartition des ventes par categorie", self.donut_chart), 2)
@@ -128,85 +127,6 @@ class MetricBox(QFrame):
     def set_values(self, value: str, subtitle: str) -> None:
         self.value.setText(value)
         self.subtitle.setText(subtitle)
-
-
-class BarChart(QWidget):
-    def __init__(self) -> None:
-        super().__init__()
-        self.values: list[int] = []
-        self.labels: list[str] = []
-        self.setMinimumHeight(250)
-
-    def set_values(self, values: list[int], labels: list[str]) -> None:
-        self.values = values[:7]
-        self.labels = labels[:7]
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = self.rect().adjusted(30, 20, -20, -28)
-        painter.setPen(QPen(QColor("#e3e9ee"), 1))
-        for i in range(5):
-            y = rect.top() + i * rect.height() / 4
-            painter.drawLine(rect.left(), int(y), rect.right(), int(y))
-        if not self.values:
-            return
-        max_value = max(self.values) or 1
-        bar_width = max(24, int(rect.width() / (len(self.values) * 2.4)))
-        gap = rect.width() / max(1, len(self.values))
-        painter.setBrush(QColor("#55c982"))
-        painter.setPen(Qt.PenStyle.NoPen)
-        for i, value in enumerate(self.values):
-            h = rect.height() * value / max_value
-            x = rect.left() + i * gap + gap / 2 - bar_width / 2
-            y = rect.bottom() - h
-            painter.drawRoundedRect(QRectF(x, y, bar_width, h), 4, 4)
-            painter.setPen(QColor("#073264"))
-            painter.drawText(int(x - 20), int(y - 6), bar_width + 40, 16, Qt.AlignmentFlag.AlignCenter, _format_number(value))
-            painter.drawText(int(x - 28), rect.bottom() + 8, bar_width + 56, 16, Qt.AlignmentFlag.AlignCenter, self.labels[i][:10])
-            painter.setPen(Qt.PenStyle.NoPen)
-
-
-class DonutChart(QWidget):
-    COLORS = ["#14a83f", "#1f74d8", "#ffb033", "#ef4b55", "#e456a2", "#b2a7ff"]
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.values: list[tuple[str, int]] = []
-        self.setMinimumHeight(250)
-
-    def set_values(self, values: list[tuple[str, int]]) -> None:
-        self.values = values[:6]
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        total = sum(value for _, value in self.values) or 1
-        size = min(self.height() - 40, max(120, self.width() // 2))
-        rect = QRectF(28, 32, size, size)
-        start = 90 * 16
-        for i, (_, value) in enumerate(self.values):
-            span = int(-360 * 16 * value / total)
-            painter.setBrush(QColor(self.COLORS[i % len(self.COLORS)]))
-            painter.setPen(QPen(QColor("#ffffff"), 2))
-            painter.drawPie(rect, start, span)
-            start += span
-        painter.setBrush(QColor("#ffffff"))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(rect.adjusted(size * 0.28, size * 0.28, -size * 0.28, -size * 0.28))
-        painter.setPen(QColor("#073264"))
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"Total\n{_format_number(total)}")
-        x = int(rect.right() + 28)
-        y = int(rect.top() + 8)
-        for i, (label, value) in enumerate(self.values):
-            painter.setBrush(QColor(self.COLORS[i % len(self.COLORS)]))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(x, y + i * 30, 8, 8)
-            painter.setPen(QColor("#073264"))
-            percent = int(value * 100 / total)
-            painter.drawText(x + 18, y + i * 30 - 4, 230, 18, Qt.AlignmentFlag.AlignLeft, f"{label[:20]} {percent}%")
 
 
 def _panel(title: str, table: QWidget) -> QFrame:

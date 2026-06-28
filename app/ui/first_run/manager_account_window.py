@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from app.core.exceptions import ValidationError
 from app.services.auth_service import AuthService
+from app.ui.components.icons import ui_icon
 
 
 class FirstRunWindow(QMainWindow):
@@ -249,10 +250,12 @@ class FirstRunWindow(QMainWindow):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(14)
 
-        icon_label = QLabel("i" if icon == "info" else "OK")
+        icon_label = QLabel()
         icon_label.setObjectName(f"{variant}Icon")
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_label.setFixedSize(36, 36)
+        icon_color = "#126ce0" if icon == "info" else "#1f8f2e"
+        icon_label.setPixmap(ui_icon("info" if icon == "info" else "shield", icon_color, 20).pixmap(20, 20))
         layout.addWidget(icon_label)
 
         text_layout = QVBoxLayout()

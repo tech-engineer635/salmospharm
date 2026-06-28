@@ -1,12 +1,73 @@
-"""Petites icones vectorielles dessinees en PySide pour l'UI."""
+"""Icones semantiques de l'interface, fournies par QtAwesome."""
 
 from __future__ import annotations
 
+import qtawesome as qta
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
 
+_ICON_NAMES = {
+    "dashboard": "fa6s.table-cells-large",
+    "grid": "fa6s.table-cells-large",
+    "produits": "fa6s.box",
+    "product": "fa6s.box",
+    "stock": "fa6s.boxes-stacked",
+    "ventes": "fa6s.cart-shopping",
+    "cart": "fa6s.cart-shopping",
+    "factures": "fa6s.receipt",
+    "ticket": "fa6s.receipt",
+    "receipt": "fa6s.receipt",
+    "rapports": "fa6s.chart-column",
+    "report": "fa6s.chart-column",
+    "vendeurs": "fa6s.users",
+    "users": "fa6s.users",
+    "historique": "fa6s.clock-rotate-left",
+    "history": "fa6s.clock-rotate-left",
+    "alertes": "fa6s.bell",
+    "bell": "fa6s.bell",
+    "parametres": "fa6s.gear",
+    "settings": "fa6s.gear",
+    "search": "fa6s.magnifying-glass",
+    "calendar": "fa6s.calendar-days",
+    "menu": "fa6s.bars",
+    "money": "fa6s.money-bill",
+    "wallet": "fa6s.wallet",
+    "transactions": "fa6s.list-check",
+    "warning": "fa6s.triangle-exclamation",
+    "plus": "fa6s.plus",
+    "add": "fa6s.plus",
+    "upload": "fa6s.upload",
+    "import": "fa6s.upload",
+    "download": "fa6s.download",
+    "print": "fa6s.print",
+    "printer": "fa6s.print",
+    "close": "fa6s.xmark",
+    "x": "fa6s.xmark",
+    "filter": "fa6s.filter",
+    "tag": "fa6s.tag",
+    "edit": "fa6s.pen",
+    "pen": "fa6s.pen",
+    "refresh": "fa6s.arrows-rotate",
+    "reload": "fa6s.arrows-rotate",
+    "trash": "fa6s.trash-can",
+    "user": "fa6s.user",
+    "lock": "fa6s.lock",
+    "eye": "fa6s.eye",
+    "eye-slash": "fa6s.eye-slash",
+    "shield": "fa6s.shield-halved",
+    "info": "fa6s.circle-info",
+    "check": "fa6s.circle-check",
+    "logout": "fa6s.right-from-bracket",
+}
+
+
 def ui_icon(name: str, color: str = "#526173", size: int = 24) -> QIcon:
+    """Retourne une icone Font Awesome coherente a partir d'un nom metier."""
+
+    return qta.icon(_ICON_NAMES.get(name, "fa6s.circle"), color=color, scale_factor=0.86)
+
+    # Compatibilite historique conservee temporairement pour les anciens builds.
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
