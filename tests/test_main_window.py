@@ -376,22 +376,16 @@ def test_photo_profil_se_montre_dans_sidebar_sans_petite_fleche():
     app.processEvents()
 
 
-def test_parametres_permet_de_choisir_mode_sombre_ou_clair():
+def test_parametres_ne_propose_plus_de_changement_de_theme():
     app = _app()
     window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
 
     window.navigate("parametres")
-    radios = {radio.text().strip(): radio for radio in window.findChildren(QRadioButton)}
+    radios = {radio.text().strip() for radio in window.findChildren(QRadioButton)}
 
-    assert "Clair" in radios
-    assert "Sombre" in radios
-    assert radios["Clair"].isChecked()
-    assert window.property("theme") in (None, "")
-
-    radios["Sombre"].setChecked(True)
-    assert window.property("theme") == "dark"
-    radios["Clair"].setChecked(True)
-    assert window.property("theme") == "light"
+    assert "Clair" not in radios
+    assert "Sombre" not in radios
+    assert window.findChild(BackupPanel) is not None
 
     window.close()
     app.processEvents()

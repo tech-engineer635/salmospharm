@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QLabel,
     QMainWindow,
-    QRadioButton,
     QScrollArea,
     QStackedWidget,
     QPushButton,
@@ -128,7 +127,7 @@ class MainWindow(QMainWindow):
             self._add_page("historique", historique)
             self._add_page("rapports", RapportsPage(self.session_utilisateur, autoload=False))
             self._add_page("alertes", AlertesPage(self.session_utilisateur, autoload=False))
-            settings = SettingsPage(self.session_utilisateur, self.set_theme)
+            settings = SettingsPage(self.session_utilisateur)
             settings.redemarrage_demande.connect(self.redemarrage_demande.emit)
             self._add_page("parametres", settings)
             for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
@@ -1381,24 +1380,6 @@ class MainWindow(QMainWindow):
             QPushButton#photoButton:hover {
                 background-color: #0b7831;
             }
-            QRadioButton#themeChoice {
-                color: #10243b;
-                font-size: 14px;
-                font-weight: 800;
-                spacing: 10px;
-                min-height: 32px;
-            }
-            QRadioButton#themeChoice::indicator {
-                width: 18px;
-                height: 18px;
-                border-radius: 9px;
-                border: 2px solid #9aa8b6;
-                background-color: #ffffff;
-            }
-            QRadioButton#themeChoice::indicator:checked {
-                border: 5px solid #0f8f3a;
-                background-color: #ffffff;
-            }
             QFrame#backupPanel {
                 background-color: #ffffff;
                 border: 1px solid #dfe8f0;
@@ -1545,62 +1526,25 @@ class PlaceholderPage(QWidget):
 
 
 class SettingsPage(QWidget):
-    """Parametres visuels et sauvegarde locale reserves au gerant."""
+    """Sauvegarde locale et restauration réservées au gérant."""
 
     redemarrage_demande = Signal()
 
     def __init__(
         self,
         session_utilisateur: SessionUtilisateur,
-        set_theme_callback,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.session_utilisateur = session_utilisateur
-        self._set_theme_callback = set_theme_callback
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
-        card = QFrame()
-        card.setObjectName("placeholderCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 22, 24, 22)
-        card_layout.setSpacing(14)
-
-        title = QLabel("Parametres")
-        title.setObjectName("placeholderTitle")
-        text = QLabel("Choisissez l'apparence de l'application. Ce reglage visuel n'est pas encore persiste.")
-        text.setObjectName("placeholderText")
-        text.setWordWrap(True)
-
-        choices = QHBoxLayout()
-        choices.setSpacing(24)
-        self.light_radio = QRadioButton("Clair")
-        self.light_radio.setObjectName("themeChoice")
-        self.light_radio.setChecked(True)
-        self.dark_radio = QRadioButton("Sombre")
-        self.dark_radio.setObjectName("themeChoice")
-        self.light_radio.toggled.connect(self._apply_choice)
-        self.dark_radio.toggled.connect(self._apply_choice)
-        choices.addWidget(self.light_radio)
-        choices.addWidget(self.dark_radio)
-        choices.addStretch(1)
-
-        card_layout.addWidget(title)
-        card_layout.addWidget(text)
-        card_layout.addLayout(choices)
-        layout.addWidget(card)
         self.backup_panel = BackupPanel(session_utilisateur)
         self.backup_panel.restart_requested.connect(self.redemarrage_demande.emit)
         layout.addWidget(self.backup_panel)
         layout.addStretch(1)
-
-    def _apply_choice(self) -> None:
-        if self.dark_radio.isChecked():
-            self._set_theme_callback("dark")
-        else:
-            self._set_theme_callback("light")
 
 
 class ProfilePage(QWidget):
