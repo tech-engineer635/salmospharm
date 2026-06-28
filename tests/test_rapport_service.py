@@ -1,14 +1,15 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
+from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.constants import ACTION_CONNEXION_REUSSIE, ROLE_GERANT, ROLE_VENDEUR, TYPE_ALERTE_STOCK_FAIBLE
-from app.core.exceptions import PermissionRefuseeError
+from app.core.exceptions import PermissionRefuseeError, ValidationError
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
-from app.database.models import Alerte, JournalActivite, LotProduit, Produit, Utilisateur, Vente
+from app.database.models import Alerte, Categorie, JournalActivite, LotProduit, Produit, Utilisateur, Vente
 from app.services.alerte_service import AlerteService
 from app.services.auth_service import SessionUtilisateur
 from app.services.rapport_service import RapportService
@@ -65,6 +66,66 @@ def test_vendeur_refuse_rapport_global(tmp_path):
         service.synthese_gerant(vendeur)
 
     engine.dispose()
+
+
+def test_rapport_periode_complete_jours_categories_et_performances(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT, "gerant@test.local", "Gerant")
+    jean = _creer_utilisateur(SessionLocal, ROLE_VENDEUR, "jean@test.local", "Jean K.")
+    vente_ancienne = _creer_vente(SessionLocal, jean, "Paracetamol", 1000, 2)
+    vente_recente = _creer_vente(SessionLocal, jean, "Savon medical", 1500, 1)
+    _dater_et_categoriser(SessionLocal, vente_ancienne, date.today() - timedelta(days=2), "Medicaments")
+    _dater_et_categoriser(SessionLocal, vente_recente, date.today(), "Soins & Hygiene")
+    debut = date.today() - timedelta(days=2)
+    service = RapportService(session_factory=SessionLocal)
+
+    rapport = service.rapport_periode(
+        gerant,
+        date_debut=debut,
+        date_fin=date.today(),
+        mode="JOURNALIER",
+    )
+
+    engine.dispose()
+
+    assert len(rapport.evolution) == (date.today() - debut).days + 1
+    assert sum(item.total for item in rapport.evolution) == 3500
+    assert {item.categorie_nom for item in rapport.categories} == {"Medicaments", "Soins & Hygiene"}
+    assert rapport.produits_vendus == 3
+    assert rapport.vendeurs[0].produits_vendus == 3
+    assert rapport.vendeurs[0].panier_moyen == 1750
+    assert rapport.vendeurs[0].part_ca == 100
+
+
+def test_export_excel_rapport_et_validation_periode(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT, "gerant@test.local", "Gerant")
+    vendeur = _creer_utilisateur(SessionLocal, ROLE_VENDEUR, "vendeur@test.local", "Vendeur")
+    _creer_vente(SessionLocal, vendeur, "Paracetamol", 1000, 2)
+    service = RapportService(session_factory=SessionLocal)
+    rapport = service.rapport_periode(
+        gerant,
+        date_debut=date.today(),
+        date_fin=date.today(),
+    )
+
+    destination = service.exporter_excel(gerant, rapport, tmp_path / "rapport.xlsx")
+    workbook = load_workbook(destination)
+
+    with pytest.raises(PermissionRefuseeError):
+        service.exporter_excel(vendeur, rapport, tmp_path / "interdit.xlsx")
+    with pytest.raises(ValidationError):
+        service.rapport_periode(
+            gerant,
+            date_debut=date.today(),
+            date_fin=date.today() - timedelta(days=1),
+        )
+
+    engine.dispose()
+
+    assert destination.exists()
+    assert workbook.sheetnames == ["Synthese", "Evolution", "Categories", "Vendeurs"]
+    assert workbook["Synthese"]["B5"].value == 2000
 
 
 def test_alertes_liste_marque_lue_et_refuse_vendeur(tmp_path):
@@ -176,3 +237,15 @@ def _creer_produit_et_alerte(SessionLocal) -> int:
         session.add(alerte)
         session.commit()
         return produit_id
+
+
+def _dater_et_categoriser(SessionLocal, vente_id: int, jour: date, categorie_nom: str) -> None:
+    with SessionLocal() as session:
+        vente = session.get(Vente, vente_id)
+        vente.cree_le = f"{jour.isoformat()} 10:00:00"
+        produit = vente.lignes[0].produit
+        categorie = Categorie(nom=categorie_nom)
+        session.add(categorie)
+        session.flush()
+        produit.categorie_id = categorie.id
+        session.commit()

@@ -997,3 +997,12 @@ Resultats :
 - Les courbes, histogrammes, diagrammes annulaires et anneaux de progression sont centralises dans `app/ui/components/charts.py`.
 - Les icones des ecrans sont harmonisees avec `QtAwesome 1.4.2` via le composant semantique `ui_icon`.
 - Les dessins `QPainter` conserves concernent uniquement les illustrations, fonds et recadrages d'images, pas les graphiques de donnees.
+
+## Refonte fonctionnelle de l'ecran Rapports
+
+- Ajout de `RapportRepository` pour isoler toutes les requetes SQL des rapports et historiques.
+- Calcul sur une periode inclusive : chronologie journaliere, categories, performances vendeurs et comparaison avec la periode precedente.
+- Modes Journalier, Mensuel et Par vendeur relies a des donnees reelles sans table `rapports`.
+- Reproduction de la maquette avec cartes alternees, histogramme annote, donut avec legende complete et tableau vendeur totalise.
+- Deux filtres de date accessibles, etat vide explicite et absence de defilement a 1450 x 900.
+- Export du rapport affiche en classeur Excel reserve au gerant.

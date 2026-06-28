@@ -69,6 +69,7 @@ class MainWindow(QMainWindow):
         self.content_stack.setCurrentIndex(self._pages[key])
         self.sidebar.set_active(key)
         self.topbar.set_title(self._page_title_for_session(key))
+        self.topbar.set_reports_mode(key == "rapports")
         page = self._page_widgets.get(key)
         if page is not None and hasattr(page, "on_show"):
             page.on_show()
@@ -870,7 +871,7 @@ class MainWindow(QMainWindow):
             }
             QLabel#reportsTitle {
                 color: #073264;
-                font-size: 25px;
+                font-size: 24px;
                 font-weight: 900;
             }
             QLabel#reportsSubtitle {
@@ -878,15 +879,48 @@ class MainWindow(QMainWindow):
                 font-size: 13px;
                 font-weight: 700;
             }
-            QLineEdit#reportsSearch {
-                min-width: 360px;
-                max-width: 480px;
-                min-height: 38px;
+            QFrame#reportsPeriod {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 7px;
+                min-height: 42px;
             }
-            QLineEdit#dateFilterInput {
-                min-width: 130px;
-                max-width: 150px;
-                min-height: 38px;
+            QDateEdit#reportsDateEdit {
+                background: transparent;
+                border: none;
+                color: #0b3567;
+                font-size: 12px;
+                font-weight: 700;
+                min-height: 36px;
+                min-width: 108px;
+                padding: 0 4px;
+            }
+            QDateEdit#reportsDateEdit::drop-down {
+                border: none;
+                width: 16px;
+            }
+            QLabel#reportsPeriodArrow {
+                color: #7890aa;
+                font-size: 15px;
+                min-width: 18px;
+            }
+            QPushButton#reportsExportButton {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 7px;
+                color: #0b3567;
+                font-size: 12px;
+                font-weight: 800;
+                min-height: 42px;
+                padding: 0 18px;
+            }
+            QPushButton#reportsExportButton:hover {
+                border-color: #0b3567;
+                background-color: #f7fbff;
+            }
+            QPushButton#reportsExportButton:disabled {
+                color: #8a98a8;
+                background-color: #f4f7f9;
             }
             QPushButton#reportTab,
             QPushButton#reportTabActive {
@@ -894,7 +928,7 @@ class MainWindow(QMainWindow):
                 border: 1px solid #dfe8f0;
                 border-radius: 8px;
                 color: #0b3567;
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 800;
                 min-height: 38px;
                 padding: 0 22px;
@@ -918,31 +952,60 @@ class MainWindow(QMainWindow):
             QFrame#reportMetric {
                 background-color: #ffffff;
                 border: 1px solid #edf1f4;
-                border-radius: 10px;
+                border-radius: 8px;
             }
             QLabel#reportMetricIcon {
                 background-color: #18a640;
                 border-radius: 25px;
             }
+            QLabel#reportMetricIconBlue {
+                background-color: #2474d8;
+                border-radius: 25px;
+            }
             QLabel#reportsPanelTitle {
                 color: #073264;
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: 900;
+            }
+            QLabel#reportsChartContext,
+            QPushButton#reportsSeeAll {
+                background-color: #f8fbfd;
+                border: 1px solid #dfe8f0;
+                border-radius: 6px;
+                color: #31547a;
+                font-size: 10px;
+                min-height: 26px;
+                padding: 0 10px;
+            }
+            QPushButton#reportsSeeAll:hover {
+                color: #0a8f35;
+                border-color: #9bd8ad;
             }
             QLabel#reportMetricTitle {
                 color: #31547a;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 800;
             }
             QLabel#reportMetricValue {
                 color: #073264;
-                font-size: 22px;
+                font-size: 20px;
                 font-weight: 900;
             }
             QLabel#reportMetricSubtitle {
                 color: #108d38;
-                font-size: 12px;
+                font-size: 10px;
                 font-weight: 800;
+            }
+            QLabel#reportMetricSubtitle[trendState="negative"] {
+                color: #d13b47;
+            }
+            QLabel#reportsEmptyState {
+                background-color: #f7fafc;
+                border: 1px solid #e4ebf1;
+                border-radius: 7px;
+                color: #516b85;
+                font-size: 13px;
+                min-height: 44px;
             }
             QTableWidget#reportsTable {
                 background-color: #ffffff;
@@ -951,6 +1014,16 @@ class MainWindow(QMainWindow):
                 gridline-color: #edf1f4;
                 selection-background-color: #edf9f0;
                 selection-color: #10243b;
+                alternate-background-color: #fbfdff;
+                font-size: 11px;
+            }
+            QTableWidget#reportsTable QHeaderView::section {
+                background-color: #ffffff;
+                color: #607a96;
+                font-size: 10px;
+                font-weight: 700;
+                min-height: 30px;
+                border-bottom: 1px solid #edf1f4;
             }
             QLabel#actionSummaryRow {
                 color: #073264;

@@ -126,7 +126,8 @@ def test_dashboard_gerant_aujourdhui_et_voir_tout_ouvre_detail():
     window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
 
     window.navigate("dashboard")
-    buttons = [button for button in window.findChildren(QPushButton) if button.text().strip() == "Voir tout"]
+    dashboard = window._page_widgets["dashboard"]
+    buttons = [button for button in dashboard.findChildren(QPushButton) if button.text().strip() == "Voir tout"]
 
     assert any(button.text().strip() == "Aujourd'hui   v" for button in window.findChildren(QPushButton))
     assert buttons

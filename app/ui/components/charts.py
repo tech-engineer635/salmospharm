@@ -14,7 +14,7 @@ from PySide6.QtCharts import (
     QPieSeries,
     QValueAxis,
 )
-from PySide6.QtCore import QMargins, QPointF, Qt
+from PySide6.QtCore import QMargins, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QLabel
 
@@ -92,7 +92,13 @@ class SalesBarChart(QChartView):
         super().__init__(self._chart)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setStyleSheet("background: transparent; border: none;")
-        self.setMinimumHeight(250)
+        self.setMinimumHeight(230)
+        self.setAccessibleName("Evolution des ventes")
+        self._value_labels: list[QLabel] = []
+        self._values: list[int] = []
+        self._axis_maximum = 1.0
+        self._divisor = 1.0
+        self._chart.plotAreaChanged.connect(lambda _rect: self._position_value_labels())
         self.set_values([0], [""])
 
     def set_values(self, values: Sequence[int], labels: Sequence[str]) -> None:
@@ -100,19 +106,23 @@ class SalesBarChart(QChartView):
         for axis in tuple(self._chart.axes()):
             self._chart.removeAxis(axis)
 
-        safe_values = [max(0, int(value)) for value in list(values)[:7]] or [0]
+        safe_values = [max(0, int(value)) for value in list(values)[:12]] or [0]
         safe_labels = [str(label)[:12] for label in list(labels)[:7]] or [""]
+        safe_values = safe_values[: len(safe_labels)]
+        maximum = max(safe_values) or 1
+        self._divisor = 1_000_000 if maximum >= 1_000_000 else (1_000 if maximum >= 1_000 else 1)
+        chart_values = [value / self._divisor for value in safe_values]
+        self._axis_maximum = (max(chart_values) or 1) * 1.24
+        self._values = safe_values
         bar_set = QBarSet("Ventes (CDF)")
-        bar_set.append(safe_values)
+        bar_set.append(chart_values)
         bar_set.setColor(QColor("#55c982"))
         bar_set.setBorderColor(QColor("#55c982"))
 
         series = QBarSeries()
         series.append(bar_set)
         series.setBarWidth(0.48)
-        series.setLabelsVisible(True)
-        series.setLabelsPosition(QBarSeries.LabelsPosition.LabelsOutsideEnd)
-        series.setLabelsFormat("@value")
+        series.setLabelsVisible(False)
         self._chart.addSeries(series)
 
         x_axis = QBarCategoryAxis()
@@ -122,11 +132,15 @@ class SalesBarChart(QChartView):
         x_axis.setGridLineVisible(False)
         x_axis.setLineVisible(False)
 
-        maximum = max(safe_values) or 1
         y_axis = QValueAxis()
-        y_axis.setRange(0, maximum * 1.2)
+        y_axis.setRange(0, self._axis_maximum)
         y_axis.setTickCount(5)
-        y_axis.setLabelFormat("%.0f")
+        if self._divisor == 1_000_000:
+            y_axis.setLabelFormat("%.1fM")
+        elif self._divisor == 1_000:
+            y_axis.setLabelFormat("%.0fK")
+        else:
+            y_axis.setLabelFormat("%.0f")
         y_axis.setLabelsColor(MUTED)
         y_axis.setLabelsFont(QFont("Segoe UI", 8))
         y_axis.setGridLineColor(GRID)
@@ -136,6 +150,40 @@ class SalesBarChart(QChartView):
         self._chart.addAxis(y_axis, Qt.AlignmentFlag.AlignLeft)
         series.attachAxis(x_axis)
         series.attachAxis(y_axis)
+        self._rebuild_value_labels()
+        QTimer.singleShot(0, self._position_value_labels)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self._position_value_labels)
+
+    def _rebuild_value_labels(self) -> None:
+        for label in self._value_labels:
+            label.hide()
+            label.deleteLater()
+        self._value_labels = []
+        for value in self._values:
+            label = QLabel(_format_number(value), self.viewport())
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setStyleSheet(
+                "background: transparent; color: #073264; font: 700 8px 'Segoe UI';"
+            )
+            label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            label.setAccessibleName(f"Ventes {_format_number(value)} CDF")
+            label.show()
+            self._value_labels.append(label)
+
+    def _position_value_labels(self) -> None:
+        if not self._value_labels:
+            return
+        plot = self._chart.plotArea()
+        count = len(self._value_labels)
+        for index, (label, value) in enumerate(zip(self._value_labels, self._values)):
+            x = plot.left() + plot.width() * (index + 0.5) / count
+            scaled = value / self._divisor
+            y = plot.bottom() - plot.height() * scaled / self._axis_maximum
+            label.setGeometry(int(x - 48), max(0, int(y - 23)), 96, 18)
+            label.raise_()
 
 
 class DonutChart(QChartView):
@@ -148,7 +196,9 @@ class DonutChart(QChartView):
         super().__init__(self._chart)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setStyleSheet("background: transparent; border: none;")
-        self.setMinimumHeight(250)
+        self.setMinimumHeight(230)
+        self.setAccessibleName("Repartition des ventes par categorie")
+        self._legend_rows: list[tuple[QLabel, QLabel]] = []
         self._center = QLabel(self.viewport())
         self._center.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._center.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
@@ -165,34 +215,65 @@ class DonutChart(QChartView):
 
         series = QPieSeries()
         series.setHoleSize(0.56)
-        series.setPieSize(0.72)
-        series.setHorizontalPosition(0.31)
+        series.setPieSize(0.66)
+        series.setHorizontalPosition(0.25)
+        legend_entries: list[tuple[str, str]] = []
         for index, (label, value) in enumerate(entries):
-            percent = int(value * 100 / total) if total else 0
-            slice_ = series.append(f"{label[:20]}  {percent}%", value or (1 if len(entries) == 1 else 0))
-            slice_.setColor(QColor(self.COLORS[index % len(self.COLORS)]))
+            percent = value * 100 / total if total else 0
+            color = self.COLORS[index % len(self.COLORS)]
+            legend = f"{label[:25]}  {_format_number(value)} ({percent:.1f}%)"
+            slice_ = series.append(legend, value or (1 if len(entries) == 1 else 0))
+            slice_.setColor(QColor(color))
             slice_.setBorderColor(QColor("#ffffff"))
             slice_.setBorderWidth(2)
             slice_.setLabelVisible(False)
+            legend_entries.append((color, legend))
         self._chart.addSeries(series)
-        legend = self._chart.legend()
-        legend.setVisible(True)
-        legend.setAlignment(Qt.AlignmentFlag.AlignRight)
-        legend.setLabelColor(INK)
-        legend.setFont(QFont("Segoe UI", 8))
+        self._chart.legend().hide()
+        self._rebuild_legend(legend_entries)
         self._center.setText(f"Total\n{_format_number(total)}\nCDF")
-        self._position_center()
+        self._position_overlays()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._position_center()
+        self._position_overlays()
 
-    def _position_center(self) -> None:
+    def _rebuild_legend(self, entries: Sequence[tuple[str, str]]) -> None:
+        for swatch, label in self._legend_rows:
+            swatch.hide()
+            label.hide()
+            swatch.deleteLater()
+            label.deleteLater()
+        self._legend_rows = []
+        for color, text in entries:
+            swatch = QLabel(self.viewport())
+            swatch.setStyleSheet(f"background: {color}; border-radius: 3px;")
+            swatch.setFixedSize(7, 7)
+            label = QLabel(text, self.viewport())
+            label.setStyleSheet(
+                "background: transparent; color: #073264; font: 7px 'Segoe UI';"
+            )
+            label.setToolTip(text)
+            label.setAccessibleName(text)
+            swatch.show()
+            label.show()
+            self._legend_rows.append((swatch, label))
+
+    def _position_overlays(self) -> None:
         diameter = min(92, max(64, self.height() // 3))
-        center_x = int(self.width() * 0.31)
+        center_x = int(self.width() * 0.25)
         center_y = int(self.height() * 0.52)
         self._center.setGeometry(center_x - diameter // 2, center_y - diameter // 2, diameter, diameter)
         self._center.raise_()
+        legend_x = int(self.width() * 0.53)
+        start_y = max(24, int((self.height() - len(self._legend_rows) * 25) / 2))
+        label_width = max(120, self.width() - legend_x - 8)
+        for index, (swatch, label) in enumerate(self._legend_rows):
+            y = start_y + index * 25
+            swatch.move(legend_x, y + 5)
+            label.setGeometry(legend_x + 14, y, label_width - 14, 18)
+            swatch.raise_()
+            label.raise_()
 
 
 class ProgressDonutChart(QChartView):

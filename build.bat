@@ -18,7 +18,8 @@ pyinstaller app/main.py ^
   --windowed ^
   --onedir ^
   --icon app/assets/logo.ico ^
-  --add-data "app/assets;assets"
+  --add-data "app/assets;assets" ^
+  --hidden-import passlib.handlers.bcrypt
 
 echo.
 echo Build termine.

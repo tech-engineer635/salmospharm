@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from app.services.auth_service import SessionUtilisateur
@@ -35,6 +35,16 @@ class Topbar(QFrame):
         else:
             self.subtitle_label.setText("Bienvenue, Gerant")
 
+    def set_reports_mode(self, enabled: bool) -> None:
+        """Compacte la topbar quand la page possede son propre en-tete complet."""
+
+        self.setFixedHeight(62 if enabled else 154)
+        self.title_label.setVisible(not enabled)
+        self.subtitle_label.setVisible(not enabled)
+        self.search_input.setVisible(not enabled)
+        self.date_button.setVisible(not enabled)
+        self.bell_button.setVisible(not enabled)
+
     def _build_ui(self) -> None:
         layout = QHBoxLayout(self)
         layout.setContentsMargins(32, 22, 32, 16)
@@ -49,33 +59,33 @@ class Topbar(QFrame):
         menu_button.setIconSize(QSize(22, 22))
         menu_button.setFixedSize(38, 38)
         menu_button.clicked.connect(self.menu_demande.emit)
-        title_block.addWidget(menu_button)
+        title_block.addWidget(menu_button, alignment=Qt.AlignmentFlag.AlignLeft)
         self.title_label.setObjectName("topbarTitle")
         self.subtitle_label.setObjectName("topbarSubtitle")
         title_block.addWidget(self.title_label)
         title_block.addWidget(self.subtitle_label)
         layout.addLayout(title_block, 1)
 
-        search = QLineEdit()
-        search.setObjectName("topbarSearch")
-        search.addAction(ui_icon("search"), QLineEdit.ActionPosition.TrailingPosition)
-        search.setPlaceholderText(
+        self.search_input = QLineEdit()
+        self.search_input.setObjectName("topbarSearch")
+        self.search_input.addAction(ui_icon("search"), QLineEdit.ActionPosition.TrailingPosition)
+        self.search_input.setPlaceholderText(
             "Rechercher (produits, ventes, factures...)" if self.session_utilisateur.role == "GERANT"
             else "Rechercher (produits, clients...)"
         )
-        search.setFixedWidth(350)
-        layout.addWidget(search)
+        self.search_input.setFixedWidth(350)
+        layout.addWidget(self.search_input)
 
-        date_button = QPushButton("24 mai 2024   >")
-        date_button.setObjectName("dateButton")
-        date_button.setIcon(ui_icon("calendar"))
-        date_button.setIconSize(QSize(20, 20))
-        date_button.setFixedWidth(178)
-        layout.addWidget(date_button)
+        self.date_button = QPushButton("24 mai 2024   >")
+        self.date_button.setObjectName("dateButton")
+        self.date_button.setIcon(ui_icon("calendar"))
+        self.date_button.setIconSize(QSize(20, 20))
+        self.date_button.setFixedWidth(178)
+        layout.addWidget(self.date_button)
 
-        bell = QPushButton("")
-        bell.setObjectName("bellButton")
-        bell.setIcon(ui_icon("bell", "#108d38"))
-        bell.setIconSize(QSize(22, 22))
-        bell.setFixedSize(46, 46)
-        layout.addWidget(bell)
+        self.bell_button = QPushButton("")
+        self.bell_button.setObjectName("bellButton")
+        self.bell_button.setIcon(ui_icon("bell", "#108d38"))
+        self.bell_button.setIconSize(QSize(22, 22))
+        self.bell_button.setFixedSize(46, 46)
+        layout.addWidget(self.bell_button)
