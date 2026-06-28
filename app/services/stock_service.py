@@ -5,16 +5,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from datetime import timedelta
+from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import ACTION_STOCK_AJUSTE, ACTION_STOCK_ENTREE, TYPE_MOUVEMENT_AJUSTEMENT, TYPE_MOUVEMENT_ENTREE
+from app.core.constants import (
+    ACTION_EXPORT_EXCEL,
+    ACTION_STOCK_AJUSTE,
+    ACTION_STOCK_ENTREE,
+    TYPE_MOUVEMENT_AJUSTEMENT,
+    TYPE_MOUVEMENT_ENTREE,
+)
 from app.core.exceptions import ProduitInactifError, StockInsuffisantError, ValidationError
+from app.core.paths import get_exports_dir
 from app.core.permissions import (
     PERMISSION_AJUSTER_STOCK,
     PERMISSION_CONSULTER_STOCK,
     PERMISSION_ENTRER_STOCK,
+    PERMISSION_EXPORTER_DONNEES,
     exiger_permission,
 )
 from app.database.connection import create_session
@@ -25,6 +35,7 @@ from app.repositories.stock_repository import StockRepository
 from app.services.alerte_service import AlerteService
 from app.services.auth_service import SessionUtilisateur
 from app.services.journal_service import JournalService
+from app.utils.excel import convertir_date, convertir_datetime, creer_classeur_tableau, enregistrer_classeur
 
 
 @dataclass(frozen=True)
@@ -88,6 +99,68 @@ class StockService:
         exiger_permission(utilisateur.role, PERMISSION_CONSULTER_STOCK)
         with self._session_factory() as session:
             return self._stock_repository.lister_mouvements_recents(session, limit)
+
+    def exporter_excel(
+        self,
+        utilisateur: SessionUtilisateur,
+        destination: str | Path | None = None,
+    ) -> Path:
+        exiger_permission(utilisateur.role, PERMISSION_EXPORTER_DONNEES)
+        today = date.today()
+        near_limit = today + timedelta(days=30)
+        with self._session_factory() as session:
+            rows = self._lot_repository.donnees_export(session)
+            workbook, count = creer_classeur_tableau(
+                titre_feuille="Stock",
+                entetes=(
+                    "Produit",
+                    "Categorie",
+                    "Code-barres",
+                    "Numero de lot",
+                    "Quantite",
+                    "Prix d'achat (CDF)",
+                    "Date d'expiration",
+                    "Etat du lot",
+                    "Date d'entree",
+                ),
+                lignes=(
+                    (
+                        row[0],
+                        row[1] or "Sans categorie",
+                        row[2] or "",
+                        row[3] or "",
+                        int(row[4]),
+                        int(row[5]),
+                        convertir_date(row[6]),
+                        _statut_lot_export(
+                            quantite=int(row[4]),
+                            stock_total=int(row[7]),
+                            stock_minimum=int(row[8]),
+                            expiration=convertir_date(row[6]),
+                            today=today,
+                            near_limit=near_limit,
+                        ),
+                        convertir_datetime(row[9]),
+                    )
+                    for row in rows
+                ),
+                colonnes_cdf=(6,),
+                colonnes_date=(7,),
+                colonnes_datetime=(9,),
+            )
+            path = enregistrer_classeur(
+                workbook,
+                destination or get_exports_dir() / f"stock_{today.isoformat()}.xlsx",
+            )
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_EXPORT_EXCEL,
+                utilisateur_id=utilisateur.utilisateur_id,
+                table_cible="lots_produits",
+                details=f"Export Excel stock : {path.name}, {count} ligne(s).",
+            )
+            session.commit()
+        return path
 
     def choisir_lots_fefo(
         self,
@@ -281,3 +354,23 @@ class StockService:
             return None
         valeur_normalisee = valeur.strip()
         return valeur_normalisee or None
+
+
+def _statut_lot_export(
+    *,
+    quantite: int,
+    stock_total: int,
+    stock_minimum: int,
+    expiration: date | None,
+    today: date,
+    near_limit: date,
+) -> str:
+    if expiration is not None and expiration < today:
+        return "Expire"
+    if quantite == 0:
+        return "Epuise"
+    if expiration is not None and expiration <= near_limit:
+        return "Expiration proche"
+    if stock_total <= stock_minimum:
+        return "Stock faible"
+    return "Disponible"

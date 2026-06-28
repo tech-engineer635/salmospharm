@@ -124,8 +124,15 @@ def test_export_excel_rapport_et_validation_periode(tmp_path):
     engine.dispose()
 
     assert destination.exists()
-    assert workbook.sheetnames == ["Synthese", "Evolution", "Categories", "Vendeurs"]
+    assert workbook.sheetnames == [
+        "Synthese",
+        "Evolution",
+        "Categories",
+        "Vendeurs",
+        "Produits vendus",
+    ]
     assert workbook["Synthese"]["B5"].value == 2000
+    assert workbook["Synthese"]["B5"].number_format == '#,##0 "CDF"'
 
 
 def test_alertes_liste_marque_lue_et_refuse_vendeur(tmp_path):

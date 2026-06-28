@@ -144,7 +144,7 @@ class RapportRepository:
         terme: str,
         date_debut: date | None,
         date_fin: date | None,
-        limit: int,
+        limit: int | None,
     ):
         statement = (
             select(
@@ -172,7 +172,10 @@ class RapportRepository:
             statement = statement.where(func.substr(Vente.cree_le, 1, 10) >= date_debut.isoformat())
         if date_fin is not None:
             statement = statement.where(func.substr(Vente.cree_le, 1, 10) <= date_fin.isoformat())
-        return session.execute(statement.order_by(Vente.cree_le.desc(), Vente.id.desc()).limit(limit)).all()
+        statement = statement.order_by(Vente.cree_le.desc(), Vente.id.desc())
+        if limit is not None:
+            statement = statement.limit(limit)
+        return session.execute(statement).all()
 
     def lister_actions(self, session: Session, *, terme: str, limit: int):
         statement = (

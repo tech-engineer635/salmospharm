@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import Produit
+from app.database.models import Categorie, Produit
 
 
 class ProduitRepository:
@@ -63,6 +63,41 @@ class ProduitRepository:
             .order_by(Produit.nom.asc())
         )
         return list(session.execute(statement).scalars().all())
+
+    def donnees_export(
+        self,
+        session: Session,
+        *,
+        terme: str = "",
+        categorie_id: int | None = None,
+        statut: str = "TOUS",
+    ):
+        statement = (
+            select(
+                Produit.id,
+                Produit.nom,
+                Categorie.nom,
+                Produit.code_barres,
+                Produit.prix_vente,
+                Produit.stock_minimum,
+                Produit.actif,
+                Produit.cree_le,
+                Produit.modifie_le,
+            )
+            .outerjoin(Categorie, Categorie.id == Produit.categorie_id)
+        )
+        if terme.strip():
+            motif = f"%{terme.strip()}%"
+            statement = statement.where(
+                Produit.nom.ilike(motif) | Produit.code_barres.ilike(motif)
+            )
+        if categorie_id is not None:
+            statement = statement.where(Produit.categorie_id == categorie_id)
+        if statut == "ACTIFS":
+            statement = statement.where(Produit.actif == 1)
+        elif statut == "INACTIFS":
+            statement = statement.where(Produit.actif == 0)
+        return session.execute(statement.order_by(Produit.nom.asc())).all()
 
     def creer(self, session: Session, produit: Produit) -> Produit:
         session.add(produit)

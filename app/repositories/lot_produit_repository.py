@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import case, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.database.models import LotProduit, Produit
+from app.database.models import Categorie, LotProduit, Produit
 
 
 class LotProduitRepository:
@@ -37,6 +37,26 @@ class LotProduitRepository:
     def lister(self, session: Session) -> list[LotProduit]:
         statement = select(LotProduit).order_by(LotProduit.id.desc())
         return list(session.execute(statement).scalars().all())
+
+    def donnees_export(self, session: Session):
+        statement = (
+            select(
+                Produit.nom,
+                Categorie.nom,
+                Produit.code_barres,
+                LotProduit.numero_lot,
+                LotProduit.quantite,
+                LotProduit.prix_achat,
+                LotProduit.date_expiration,
+                func.sum(LotProduit.quantite).over(partition_by=Produit.id),
+                Produit.stock_minimum,
+                LotProduit.cree_le,
+            )
+            .join(Produit, Produit.id == LotProduit.produit_id)
+            .outerjoin(Categorie, Categorie.id == Produit.categorie_id)
+            .order_by(Produit.nom.asc(), LotProduit.date_expiration.asc(), LotProduit.id.asc())
+        )
+        return session.execute(statement).all()
 
     def lister_disponibles_par_produit(
         self,

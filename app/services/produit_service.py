@@ -4,17 +4,26 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import ACTION_PRODUIT_CREE, ACTION_PRODUIT_DESACTIVE, ACTION_PRODUIT_MODIFIE
+from app.core.constants import (
+    ACTION_EXPORT_EXCEL,
+    ACTION_PRODUIT_CREE,
+    ACTION_PRODUIT_DESACTIVE,
+    ACTION_PRODUIT_MODIFIE,
+)
 from app.core.exceptions import ProduitInactifError, ValidationError
+from app.core.paths import get_exports_dir
 from app.core.permissions import (
     PERMISSION_CREER_PRODUIT,
     PERMISSION_DESACTIVER_PRODUIT,
     PERMISSION_MODIFIER_PRODUIT,
     PERMISSION_RECHERCHER_PRODUITS,
+    PERMISSION_EXPORTER_DONNEES,
     exiger_permission,
 )
 from app.database.connection import create_session
@@ -23,6 +32,7 @@ from app.repositories.categorie_repository import CategorieRepository
 from app.repositories.produit_repository import ProduitRepository
 from app.services.auth_service import SessionUtilisateur
 from app.services.journal_service import JournalService
+from app.utils.excel import convertir_datetime, creer_classeur_tableau, enregistrer_classeur
 
 
 @dataclass(frozen=True)
@@ -73,6 +83,72 @@ class ProduitService:
                 categorie_id=categorie_id,
                 actifs_seulement=actifs_seulement,
             )
+
+    def exporter_excel(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        destination: str | Path | None = None,
+        terme: str = "",
+        categorie_id: int | None = None,
+        statut: str = "TOUS",
+        stock_minimum_positif: bool = False,
+    ) -> Path:
+        exiger_permission(utilisateur.role, PERMISSION_EXPORTER_DONNEES)
+        with self._session_factory() as session:
+            rows = list(
+                self._produit_repository.donnees_export(
+                    session,
+                    terme=terme,
+                    categorie_id=categorie_id,
+                    statut=statut,
+                )
+            )
+            if stock_minimum_positif:
+                rows = [row for row in rows if int(row[5]) > 0]
+            workbook, count = creer_classeur_tableau(
+                titre_feuille="Produits",
+                entetes=(
+                    "Code",
+                    "Nom du produit",
+                    "Categorie",
+                    "Code-barres",
+                    "Prix de vente (CDF)",
+                    "Stock minimum",
+                    "Statut",
+                    "Date de creation",
+                    "Derniere modification",
+                ),
+                lignes=(
+                    (
+                        f"PRD-{row[0]:05d}",
+                        row[1],
+                        row[2] or "Sans categorie",
+                        row[3] or "",
+                        int(row[4]),
+                        int(row[5]),
+                        "Actif" if row[6] == 1 else "Desactive",
+                        convertir_datetime(row[7]),
+                        convertir_datetime(row[8]),
+                    )
+                    for row in rows
+                ),
+                colonnes_cdf=(5,),
+                colonnes_datetime=(8, 9),
+            )
+            path = enregistrer_classeur(
+                workbook,
+                destination or get_exports_dir() / f"produits_{date.today().isoformat()}.xlsx",
+            )
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_EXPORT_EXCEL,
+                utilisateur_id=utilisateur.utilisateur_id,
+                table_cible="produits",
+                details=f"Export Excel produits : {path.name}, {count} ligne(s).",
+            )
+            session.commit()
+        return path
 
     def creer_categorie(
         self,

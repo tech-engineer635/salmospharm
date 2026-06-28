@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDateEdit,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -27,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.exceptions import SalmospharmError
+from app.core.paths import get_exports_dir
 from app.database.models import LotProduit
 from app.services.auth_service import SessionUtilisateur
 from app.services.produit_service import ProduitService
@@ -110,9 +113,37 @@ class StockPage(QWidget):
         refresh.setObjectName("outlineButton")
         refresh.setIcon(ui_icon("refresh", "#0b3567", 17))
         refresh.clicked.connect(self.on_show)
+        self.export_button = QPushButton("Export Excel")
+        self.export_button.setObjectName("outlineButton")
+        self.export_button.setIcon(ui_icon("download", "#108d38", 17))
+        self.export_button.setAccessibleName("Exporter le stock en Excel")
+        self.export_button.clicked.connect(self._exporter_excel)
         header.addLayout(text, 1)
+        header.addWidget(self.export_button)
         header.addWidget(refresh)
         return header
+
+    def _exporter_excel(self) -> None:
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exporter le stock",
+            str(get_exports_dir() / f"stock_{date.today().isoformat()}.xlsx"),
+            "Classeur Excel (*.xlsx)",
+        )
+        if not destination:
+            return
+        self.export_button.setDisabled(True)
+        try:
+            path = self._stock_service.exporter_excel(
+                self.session_utilisateur,
+                Path(destination),
+            )
+        except SalmospharmError as exc:
+            QMessageBox.warning(self, "SALMOSPHARM", str(exc))
+            return
+        finally:
+            self.export_button.setEnabled(True)
+        QMessageBox.information(self, "SALMOSPHARM", f"Stock exporte avec succes :\n{path}")
 
     def _build_metrics(self) -> QHBoxLayout:
         row = QHBoxLayout()

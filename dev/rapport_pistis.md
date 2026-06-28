@@ -1037,3 +1037,24 @@ Build PyInstaller reussi
 Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
 Controle visuel Parametres a 1450 x 900 sans defilement
 ```
+
+## Phase 20 - Exports Excel
+
+- Export du catalogue produits avec recherche, categorie, statut et filtre de stock minimum.
+- Export des lots de stock avec quantites, prix d'achat CDF, expirations et etat explicite.
+- Export complet des ventes validees, sans la limite d'affichage de 100 lignes.
+- Export des rapports journalier, mensuel et par vendeur avec synthese, evolution, categories, vendeurs et produits vendus.
+- Generation `.xlsx` centralisee avec filtres, volets figes, largeurs adaptees et formats CDF/date.
+- Ecriture atomique et neutralisation des textes pouvant etre interpretes comme formules Excel.
+- Permission `EXPORTER_DONNEES` verifiee dans chaque service et journalisation `EXPORT_EXCEL`.
+- Boutons QtAwesome accessibles sur Produits, Stock, Ventes et Rapports.
+
+### Validation executee
+
+```txt
+108 tests pytest reussis
+Classeur produits, stock, ventes et rapports relus avec openpyxl
+Controle visuel des quatre ecrans a 1450 x 900
+Build PyInstaller reussi
+Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
+```

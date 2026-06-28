@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.exceptions import SalmospharmError
+from app.core.paths import get_exports_dir
 from app.services.auth_service import SessionUtilisateur
 from app.services.rapport_service import RapportService, RapportSynthese
 from app.ui.components.charts import DonutChart, SalesBarChart
@@ -252,7 +253,7 @@ class RapportsPage(QWidget):
         destination, _ = QFileDialog.getSaveFileName(
             self,
             "Exporter le rapport Excel",
-            default_name,
+            str(get_exports_dir() / default_name),
             "Classeur Excel (*.xlsx)",
         )
         if not destination:

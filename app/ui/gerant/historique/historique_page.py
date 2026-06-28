@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.core.exceptions import SalmospharmError
+from app.core.paths import get_exports_dir
 from app.services.auth_service import SessionUtilisateur
 from app.services.rapport_service import RapportService, VenteHistoriqueItem
 from app.services.ticket_service import TicketService
@@ -45,7 +47,9 @@ class HistoriqueVentesGerantPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
 
-        header = QHBoxLayout()
+        header = QVBoxLayout()
+        header.setSpacing(10)
+        title_row = QHBoxLayout()
         text = QVBoxLayout()
         title = QLabel("Historique des ventes")
         title.setObjectName("reportsTitle")
@@ -53,24 +57,40 @@ class HistoriqueVentesGerantPage(QWidget):
         subtitle.setObjectName("reportsSubtitle")
         text.addWidget(title)
         text.addWidget(subtitle)
+        title_row.addLayout(text, 1)
+
+        self.export_button = QPushButton("Export Excel")
+        self.export_button.setObjectName("outlineButton")
+        self.export_button.setIcon(ui_icon("download", "#108d38", 17))
+        self.export_button.setAccessibleName("Exporter l'historique des ventes en Excel")
+        self.export_button.clicked.connect(self._exporter_excel)
+        title_row.addWidget(self.export_button)
+        header.addLayout(title_row)
+
+        filters_row = QHBoxLayout()
+        filters_row.setSpacing(10)
+        filters_row.addStretch(1)
         self.search_input = QLineEdit()
         self.search_input.setObjectName("reportsSearch")
         self.search_input.setPlaceholderText("Rechercher numero ou vendeur...")
         self.search_input.setClearButtonEnabled(True)
+        self.search_input.setMinimumWidth(260)
         self.search_input.addAction(ui_icon("search", "#506b92", 18), QLineEdit.ActionPosition.LeadingPosition)
         self.search_input.textChanged.connect(self._charger)
         self.start_input = QLineEdit()
         self.start_input.setObjectName("dateFilterInput")
         self.start_input.setPlaceholderText("Debut AAAA-MM-JJ")
+        self.start_input.setMinimumWidth(150)
         self.start_input.editingFinished.connect(self._charger)
         self.end_input = QLineEdit()
         self.end_input.setObjectName("dateFilterInput")
         self.end_input.setPlaceholderText("Fin AAAA-MM-JJ")
+        self.end_input.setMinimumWidth(150)
         self.end_input.editingFinished.connect(self._charger)
-        header.addLayout(text, 1)
-        header.addWidget(self.search_input)
-        header.addWidget(self.start_input)
-        header.addWidget(self.end_input)
+        filters_row.addWidget(self.search_input)
+        filters_row.addWidget(self.start_input)
+        filters_row.addWidget(self.end_input)
+        header.addLayout(filters_row)
         layout.addLayout(header)
 
         panel = QFrame()
@@ -134,6 +154,38 @@ class HistoriqueVentesGerantPage(QWidget):
             self.ticket_demande.emit(ticket, f"Ticket {ticket.numero_vente} pret pour reimpression.")
         except SalmospharmError as exc:
             QMessageBox.warning(self, "SALMOSPHARM", str(exc))
+
+    def _exporter_excel(self) -> None:
+        try:
+            debut = _parse_date(self.start_input.text())
+            fin = _parse_date(self.end_input.text())
+        except ValueError as exc:
+            QMessageBox.warning(self, "SALMOSPHARM", str(exc))
+            return
+        filename = f"ventes_{debut.isoformat() if debut else 'debut'}_{fin.isoformat() if fin else date.today().isoformat()}.xlsx"
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exporter les ventes",
+            str(get_exports_dir() / filename),
+            "Classeur Excel (*.xlsx)",
+        )
+        if not destination:
+            return
+        self.export_button.setDisabled(True)
+        try:
+            path = self._rapport_service.exporter_ventes_excel(
+                self.session_utilisateur,
+                destination=Path(destination),
+                terme=self.search_input.text(),
+                date_debut=debut,
+                date_fin=fin,
+            )
+        except SalmospharmError as exc:
+            QMessageBox.warning(self, "SALMOSPHARM", str(exc))
+            return
+        finally:
+            self.export_button.setEnabled(True)
+        QMessageBox.information(self, "SALMOSPHARM", f"Ventes exportees avec succes :\n{path}")
 
 
 def _format_cdf(value: int) -> str:

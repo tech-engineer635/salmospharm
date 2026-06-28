@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import date
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -22,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.exceptions import SalmospharmError
+from app.core.paths import get_exports_dir
 from app.services.auth_service import SessionUtilisateur
 from app.services.produit_service import ProduitPayload, ProduitService
 from app.ui.components.icons import ui_icon
@@ -127,11 +132,11 @@ class ProduitsPage(QWidget):
         import_button.setEnabled(False)
         import_button.setToolTip("Import catalogue a traiter dans un workflow dedie.")
 
-        export_button = QPushButton("Export Excel")
-        export_button.setObjectName("outlineButton")
-        export_button.setIcon(ui_icon("report", "#108d38", 17))
-        export_button.setEnabled(False)
-        export_button.setToolTip("Export catalogue a brancher plus tard.")
+        self.export_button = QPushButton("Export Excel")
+        self.export_button.setObjectName("outlineButton")
+        self.export_button.setIcon(ui_icon("download", "#108d38", 17))
+        self.export_button.setAccessibleName("Exporter la liste des produits en Excel")
+        self.export_button.clicked.connect(self._exporter_excel)
 
         filter_button = QPushButton("Filtres")
         filter_button.setObjectName("outlineButton")
@@ -140,7 +145,7 @@ class ProduitsPage(QWidget):
 
         toolbar.addWidget(new_button)
         toolbar.addWidget(import_button)
-        toolbar.addWidget(export_button)
+        toolbar.addWidget(self.export_button)
         toolbar.addStretch(1)
         toolbar.addWidget(filter_button)
         return toolbar
@@ -401,6 +406,33 @@ class ProduitsPage(QWidget):
         self.status_filter_combo.setCurrentIndex(0)
         self.stock_filter_combo.setCurrentIndex(0)
         self._charger_produits()
+
+    def _exporter_excel(self) -> None:
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exporter les produits",
+            str(get_exports_dir() / f"produits_{date.today().isoformat()}.xlsx"),
+            "Classeur Excel (*.xlsx)",
+        )
+        if not destination:
+            return
+        status = ("ACTIFS", "INACTIFS")[self.status_filter_combo.currentIndex() - 1] if self.status_filter_combo.currentIndex() in {1, 2} else "TOUS"
+        self.export_button.setDisabled(True)
+        try:
+            path = self._produit_service.exporter_excel(
+                self.session_utilisateur,
+                destination=Path(destination),
+                terme=self.search_input.text(),
+                categorie_id=self.filter_category_combo.currentData(),
+                statut=status,
+                stock_minimum_positif=self.stock_filter_combo.currentIndex() == 1,
+            )
+        except SalmospharmError as exc:
+            QMessageBox.warning(self, "SALMOSPHARM", str(exc))
+            return
+        finally:
+            self.export_button.setEnabled(True)
+        QMessageBox.information(self, "SALMOSPHARM", f"Produits exportes avec succes :\n{path}")
 
     def _creer_categorie(self) -> None:
         try:

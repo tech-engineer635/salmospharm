@@ -15,6 +15,7 @@ from app.ui.gerant.produits import ProduitsPage
 from app.ui.gerant.parametres import BackupPanel
 from app.ui.gerant.rapports import RapportsPage
 from app.ui.gerant.stock import StockPage
+from app.ui.gerant.historique import HistoriqueVentesGerantPage
 from app.ui.gerant.vendeurs import VendeursPage
 from app.ui.layouts.sidebar import Sidebar
 from app.ui.vendeur.nouvelle_vente import NouvelleVentePage
@@ -442,6 +443,36 @@ def test_parametres_gerant_affiche_backup_sans_exposer_au_vendeur():
 
     gerant_window.close()
     vendeur_window.close()
+    app.processEvents()
+
+
+def test_ecrans_gerant_exposent_les_exports_excel_accessibles():
+    app = _app()
+    window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
+
+    pages = (
+        window._page_widgets["produits"],
+        window._page_widgets["stock"],
+        window._page_widgets["ventes"],
+        window._page_widgets["rapports"],
+    )
+    accessible_names = {
+        page.export_button.accessibleName()
+        for page in pages
+    }
+
+    assert isinstance(pages[0], ProduitsPage)
+    assert isinstance(pages[1], StockPage)
+    assert isinstance(pages[2], HistoriqueVentesGerantPage)
+    assert isinstance(pages[3], RapportsPage)
+    assert accessible_names == {
+        "Exporter la liste des produits en Excel",
+        "Exporter le stock en Excel",
+        "Exporter l'historique des ventes en Excel",
+        "Exporter le rapport en Excel",
+    }
+
+    window.close()
     app.processEvents()
 
 

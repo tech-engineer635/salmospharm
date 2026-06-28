@@ -7,9 +7,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
 
-from app.core.constants import ROLE_GERANT
+from app.core.constants import ACTION_EXPORT_EXCEL, ROLE_GERANT
 from app.core.exceptions import ValidationError
 from app.core.paths import get_exports_dir
 from app.core.permissions import (
@@ -23,6 +22,13 @@ from app.core.permissions import (
 from app.database.connection import create_session
 from app.repositories.rapport_repository import RapportRepository
 from app.services.auth_service import SessionUtilisateur
+from app.services.journal_service import JournalService
+from app.utils.excel import (
+    convertir_datetime,
+    creer_classeur_tableau,
+    enregistrer_classeur,
+    styliser_feuille,
+)
 
 
 @dataclass(frozen=True)
@@ -110,9 +116,11 @@ class RapportService:
         self,
         session_factory=create_session,
         rapport_repository: RapportRepository | None = None,
+        journal_service: JournalService | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._rapport_repository = rapport_repository or RapportRepository()
+        self._journal_service = journal_service or JournalService()
 
     def lister_ventes(
         self,
@@ -293,11 +301,86 @@ class RapportService:
         )
         if path.suffix.lower() != ".xlsx":
             path = path.with_suffix(".xlsx")
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _creer_classeur(rapport).save(path)
-        except OSError as exc:
-            raise ValidationError("Impossible d'enregistrer le rapport Excel.") from exc
+        workbook = _creer_classeur(rapport)
+        path = enregistrer_classeur(workbook, path)
+        with self._session_factory() as session:
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_EXPORT_EXCEL,
+                utilisateur_id=utilisateur.utilisateur_id,
+                table_cible="ventes",
+                details=(
+                    f"Export Excel rapport {rapport.mode.lower()} : {path.name}, "
+                    f"periode {debut.isoformat()} au {fin.isoformat()}."
+                ),
+            )
+            session.commit()
+        return path
+
+    def exporter_ventes_excel(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        destination: str | Path | None = None,
+        terme: str = "",
+        date_debut: date | None = None,
+        date_fin: date | None = None,
+    ) -> Path:
+        exiger_permission(utilisateur.role, PERMISSION_EXPORTER_DONNEES)
+        if date_debut is not None and date_fin is not None:
+            _valider_periode(date_debut, date_fin)
+        with self._session_factory() as session:
+            rows = self._rapport_repository.lister_ventes(
+                session,
+                vendeur_id=None,
+                terme=terme,
+                date_debut=date_debut,
+                date_fin=date_fin,
+                limit=None,
+            )
+            workbook, count = creer_classeur_tableau(
+                titre_feuille="Ventes",
+                entetes=(
+                    "Numero de vente",
+                    "Date et heure",
+                    "Vendeur",
+                    "Nombre d'articles",
+                    "Total (CDF)",
+                    "Montant recu (CDF)",
+                    "Monnaie rendue (CDF)",
+                    "Statut",
+                ),
+                lignes=(
+                    (
+                        row[1],
+                        convertir_datetime(row[4]),
+                        row[3],
+                        int(row[7]),
+                        int(row[5]),
+                        int(row[6]),
+                        int(row[6]) - int(row[5]),
+                        "VALIDEE",
+                    )
+                    for row in rows
+                ),
+                colonnes_cdf=(5, 6, 7),
+                colonnes_datetime=(2,),
+            )
+            start_label = date_debut.isoformat() if date_debut else "debut"
+            end_label = date_fin.isoformat() if date_fin else date.today().isoformat()
+            path = enregistrer_classeur(
+                workbook,
+                destination
+                or get_exports_dir() / f"ventes_{start_label}_{end_label}.xlsx",
+            )
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_EXPORT_EXCEL,
+                utilisateur_id=utilisateur.utilisateur_id,
+                table_cible="ventes",
+                details=f"Export Excel ventes : {path.name}, {count} ligne(s).",
+            )
+            session.commit()
         return path
 
     def lister_actions(self, utilisateur: SessionUtilisateur, *, terme: str = "", limit: int = 100) -> list[JournalActionItem]:
@@ -374,18 +457,25 @@ def _creer_classeur(rapport: RapportSynthese) -> Workbook:
             ]
         )
 
+    produits = workbook.create_sheet("Produits vendus")
+    produits.append(["Produit", "Quantite vendue", "Ventes (CDF)"])
+    for item in rapport.produits:
+        produits.append([item.produit_nom, item.quantite, item.total])
+
     for sheet in workbook.worksheets:
-        for cell in sheet[1]:
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor="0B3567")
-            cell.alignment = Alignment(horizontal="center")
-        sheet.freeze_panes = "A2"
-        for column in sheet.columns:
-            width = min(
-                42,
-                max(12, max(len(str(cell.value or "")) for cell in column) + 2),
-            )
-            sheet.column_dimensions[column[0].column_letter].width = width
+        styliser_feuille(sheet)
+    for cell in summary["B"][4:7]:
+        if cell.row in {5, 7}:
+            cell.number_format = '#,##0 "CDF"'
+    for cell in evolution["C"][1:]:
+        cell.number_format = '#,##0 "CDF"'
+    for cell in categories["C"][1:]:
+        cell.number_format = '#,##0 "CDF"'
+    for column in ("C", "D"):
+        for cell in vendeurs[column][1:]:
+            cell.number_format = '#,##0 "CDF"'
+    for cell in produits["C"][1:]:
+        cell.number_format = '#,##0 "CDF"'
     for cell in categories["D"][1:]:
         cell.number_format = "0.0%"
     for cell in vendeurs["F"][1:] + vendeurs["G"][1:]:
