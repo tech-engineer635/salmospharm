@@ -1,4 +1,5 @@
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -6,13 +7,19 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from app.core.constants import ACTION_BACKUP_EXPORTE, ACTION_BACKUP_IMPORTE, ROLE_GERANT, ROLE_VENDEUR
+from app.core.constants import (
+    ACTION_BACKUP_EXPORTE,
+    ACTION_BACKUP_IMPORTE,
+    ACTION_SAUVEGARDE_AUTO_CREEE,
+    ROLE_GERANT,
+    ROLE_VENDEUR,
+)
 from app.core.exceptions import BackupInvalideError, PermissionRefuseeError
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
-from app.database.models import JournalActivite, Produit, Utilisateur
+from app.database.models import JournalActivite, Parametre, Produit, Utilisateur
 from app.services.auth_service import SessionUtilisateur
-from app.services.backup_service import BackupService
+from app.services.backup_service import AutomaticBackupManager, BackupService
 
 
 def test_export_spharm_contient_base_manifest_assets_et_factures(tmp_path):
@@ -132,6 +139,107 @@ def test_import_revient_aux_donnees_actuelles_si_remplacement_fichier_echoue(tmp
     engine.dispose()
 
     assert products == {"Produit archive", "Produit actuel"}
+
+
+def test_sauvegarde_quotidienne_est_creee_une_seule_fois_par_jour(tmp_path):
+    engine, SessionLocal, service = _environment(tmp_path)
+
+    first = service.executer_sauvegarde_quotidienne()
+    second = service.executer_sauvegarde_quotidienne()
+
+    with SessionLocal() as session:
+        parametre = session.execute(select(Parametre)).scalar_one()
+        actions = list(
+            session.execute(
+                select(JournalActivite).where(
+                    JournalActivite.action == ACTION_SAUVEGARDE_AUTO_CREEE
+                )
+            ).scalars()
+        )
+
+    engine.dispose()
+
+    assert first.created and first.path is not None and first.path.exists()
+    assert first.path.name.startswith("auto_")
+    assert not second.created and second.reason == "deja_effectuee"
+    assert parametre.derniere_sauvegarde
+    assert len(actions) == 1
+
+
+def test_sauvegarde_fermeture_exige_une_modification(tmp_path):
+    engine, SessionLocal, service = _environment(tmp_path)
+    empreinte = service.empreinte_donnees()
+
+    unchanged = service.executer_sauvegarde_fermeture(empreinte)
+    _create_product(SessionLocal, "Produit modifie")
+    changed = service.executer_sauvegarde_fermeture(empreinte)
+
+    engine.dispose()
+
+    assert not unchanged.created and unchanged.reason == "aucune_modification"
+    assert changed.created and changed.reason == "fermeture"
+    assert changed.path is not None and changed.path.exists()
+
+
+def test_configuration_auto_est_persistante_et_reservee_au_gerant(tmp_path):
+    engine, SessionLocal, service = _environment(tmp_path)
+    gerant = _create_user(SessionLocal, ROLE_GERANT, "gerant-auto@test.local")
+    vendeur = _create_user(SessionLocal, ROLE_VENDEUR, "vendeur-auto@test.local")
+
+    configuration = service.configurer_sauvegarde_automatique(
+        gerant,
+        activee=False,
+        frequence="FERMETURE",
+    )
+    result = service.executer_sauvegarde_quotidienne()
+
+    with pytest.raises(PermissionRefuseeError):
+        service.configurer_sauvegarde_automatique(
+            vendeur,
+            activee=True,
+            frequence="QUOTIDIENNE",
+        )
+
+    engine.dispose()
+
+    assert not configuration.activee
+    assert configuration.frequence == "FERMETURE"
+    assert not result.created and result.reason == "configuration_inactive"
+
+
+def test_retention_conserve_15_archives_internes_et_export_manuel(tmp_path):
+    engine, _SessionLocal, service = _environment(tmp_path)
+    service.backups_dir.mkdir(parents=True)
+    for index in range(18):
+        archive = service.backups_dir / f"auto_2026-06-01_00-00-{index:02d}.spharm"
+        archive.write_bytes(str(index).encode("ascii"))
+        os.utime(archive, (index + 1, index + 1))
+    manual = service.backups_dir / "sauvegarde_client.spharm"
+    manual.write_bytes(b"manual")
+
+    deleted = service.nettoyer_anciennes_sauvegardes()
+    remaining_internal = list(service.backups_dir.glob("auto_*.spharm"))
+
+    engine.dispose()
+
+    assert len(deleted) == 3
+    assert len(remaining_internal) == 15
+    assert manual.exists()
+
+
+def test_gestionnaire_cycle_de_vie_sauvegarde_une_seule_fois_a_la_fermeture(tmp_path):
+    engine, SessionLocal, service = _environment(tmp_path)
+    manager = AutomaticBackupManager(service)
+
+    manager.enregistrer_utilisation()
+    _create_product(SessionLocal, "Produit apres connexion")
+    first_close = manager.fermer_application()
+    second_close = manager.fermer_application()
+
+    engine.dispose()
+
+    assert first_close.created and first_close.reason == "fermeture"
+    assert not second_close.created and second_close.reason == "deja_traitee"
 
 
 def _environment(tmp_path):

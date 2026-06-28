@@ -1016,3 +1016,24 @@ Resultats :
 - Remplacement de la base et des fichiers avec rollback automatique en cas d'echec.
 - Finalisation de `BACKUP_IMPORTE` dans la base restauree au redemarrage.
 - Ajout du panneau Sauvegarde et restauration dans les Parametres gerant.
+
+## Phase 19 - Sauvegarde automatique
+
+- Sauvegarde quotidienne au premier usage authentifie, sans doublon le meme jour.
+- Sauvegarde a la fermeture uniquement lorsque les donnees ont change depuis la connexion.
+- Modes `QUOTIDIENNE`, `FERMETURE` et `MANUELLE`, avec activation persistante dans `parametres`.
+- Empreinte SHA-256 de la base, des assets et des factures pour detecter les modifications reelles.
+- Journalisation `SAUVEGARDE_AUTO_CREEE` et mise a jour de `derniere_sauvegarde`.
+- Conservation des 15 dernieres archives internes sans supprimer les exports manuels.
+- Sauvegarde pre-import de la phase 18 conservee et incluse dans la retention.
+- Reglages accessibles dans le panneau Parametres reserve au gerant.
+- Echec automatique non bloquant, consigne dans `AppData\Local\SALMOSPHARM\logs\salmospharm.log`.
+
+### Validation executee
+
+```txt
+104 tests pytest reussis
+Build PyInstaller reussi
+Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
+Controle visuel Parametres a 1450 x 900 sans defilement
+```

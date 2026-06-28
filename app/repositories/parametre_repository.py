@@ -22,3 +22,31 @@ class ParametreRepository:
         session.add(parametre)
         session.flush()
         return parametre
+
+    def configurer_sauvegarde(
+        self,
+        session: Session,
+        parametre: Parametre,
+        *,
+        activee: bool,
+        frequence: str,
+    ) -> Parametre:
+        """Met à jour uniquement les réglages de sauvegarde du paramètre principal."""
+
+        parametre.sauvegarde_auto = int(activee)
+        parametre.frequence_sauvegarde = frequence
+        parametre.modifie_le = func.current_timestamp()
+        session.flush()
+        return parametre
+
+    def enregistrer_derniere_sauvegarde(
+        self,
+        session: Session,
+        parametre: Parametre,
+        date_sauvegarde: str,
+    ) -> Parametre:
+        """Mémorise la dernière sauvegarde automatique terminée avec succès."""
+
+        parametre.derniere_sauvegarde = date_sauvegarde
+        session.flush()
+        return parametre

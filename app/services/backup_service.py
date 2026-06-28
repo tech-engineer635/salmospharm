@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -12,6 +14,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.engine import Engine
 
@@ -19,6 +22,8 @@ from app.core.constants import (
     ACTION_BACKUP_EXPORTE,
     ACTION_BACKUP_IMPORTE,
     ACTION_ERREUR_IMPORT_BACKUP,
+    ACTION_PARAMETRES_MODIFIES,
+    ACTION_SAUVEGARDE_AUTO_CREEE,
     APP_NAME,
     APP_VERSION,
     BACKUP_FORMAT_VERSION,
@@ -37,11 +42,13 @@ from app.core.permissions import (
     exiger_permission,
 )
 from app.database.connection import SessionLocal, engine
+from app.repositories.parametre_repository import ParametreRepository
 from app.services.auth_service import SessionUtilisateur
 from app.services.journal_service import JournalService
 from app.utils.file_utils import safe_extract_archive, sha256_file, validate_archive_members
 
 
+LOGGER = logging.getLogger(__name__)
 DATABASE_ARCHIVE_PATH = "database/salmospharm.sqlite3"
 REQUIRED_TABLES = {
     "utilisateurs",
@@ -81,6 +88,55 @@ class BackupImportResult:
     restart_required: bool = True
 
 
+@dataclass(frozen=True)
+class BackupSettings:
+    activee: bool
+    frequence: str
+    derniere_sauvegarde: str | None
+    dossier: Path
+
+
+@dataclass(frozen=True)
+class AutomaticBackupResult:
+    created: bool
+    reason: str
+    path: Path | None = None
+
+
+class AutomaticBackupManager:
+    """Relie les sauvegardes automatiques au cycle de vie sans bloquer l'application."""
+
+    def __init__(self, backup_service: BackupService | None = None) -> None:
+        self.backup_service = backup_service or BackupService()
+        self._empreinte_reference: str | None = None
+        self._fermeture_traitee = False
+
+    def enregistrer_utilisation(self) -> AutomaticBackupResult:
+        try:
+            result = self.backup_service.executer_sauvegarde_quotidienne()
+        except Exception:
+            LOGGER.exception("La sauvegarde automatique quotidienne a echoue.")
+            result = AutomaticBackupResult(False, "erreur")
+        try:
+            self._empreinte_reference = self.backup_service.empreinte_donnees()
+        except Exception:
+            LOGGER.exception("Impossible de calculer l'empreinte des donnees.")
+            self._empreinte_reference = None
+        return result
+
+    def fermer_application(self) -> AutomaticBackupResult:
+        if self._fermeture_traitee:
+            return AutomaticBackupResult(False, "deja_traitee")
+        self._fermeture_traitee = True
+        try:
+            return self.backup_service.executer_sauvegarde_fermeture(
+                self._empreinte_reference
+            )
+        except Exception:
+            LOGGER.exception("La sauvegarde automatique de fermeture a echoue.")
+            return AutomaticBackupResult(False, "erreur")
+
+
 class BackupService:
     """Orchestre le backup SQLite, l'archive et le remplacement avec rollback."""
 
@@ -95,6 +151,7 @@ class BackupService:
         database_engine: Engine = engine,
         session_factory=SessionLocal,
         journal_service: JournalService | None = None,
+        parametre_repository: ParametreRepository | None = None,
     ) -> None:
         self.database_path = database_path or get_database_path()
         self.backups_dir = backups_dir or get_backups_dir()
@@ -104,6 +161,95 @@ class BackupService:
         self.database_engine = database_engine
         self.session_factory = session_factory
         self.journal_service = journal_service or JournalService()
+        self.parametre_repository = parametre_repository or ParametreRepository()
+
+    def obtenir_configuration(
+        self,
+        utilisateur: SessionUtilisateur,
+    ) -> BackupSettings:
+        exiger_permission(utilisateur.role, PERMISSION_GERER_BACKUP)
+        return self._lire_configuration()
+
+    def configurer_sauvegarde_automatique(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        activee: bool,
+        frequence: str,
+    ) -> BackupSettings:
+        exiger_permission(utilisateur.role, PERMISSION_GERER_BACKUP)
+        frequence_normalisee = frequence.strip().upper()
+        if frequence_normalisee not in {"QUOTIDIENNE", "FERMETURE", "MANUELLE"}:
+            raise BackupInvalideError("La fréquence de sauvegarde sélectionnée n'est pas valide.")
+        with self.session_factory() as session:
+            parametre = self.parametre_repository.obtenir_principal(session)
+            if parametre is None:
+                raise BackupInvalideError("Les paramètres de sauvegarde sont introuvables.")
+            self.parametre_repository.configurer_sauvegarde(
+                session,
+                parametre,
+                activee=activee,
+                frequence=frequence_normalisee,
+            )
+            self.journal_service.journaliser(
+                session,
+                action=ACTION_PARAMETRES_MODIFIES,
+                utilisateur_id=utilisateur.utilisateur_id,
+                table_cible="parametres",
+                element_id=parametre.id,
+                details=(
+                    "Sauvegarde automatique "
+                    f"{'activée' if activee else 'désactivée'}, fréquence {frequence_normalisee}."
+                ),
+            )
+            session.commit()
+        return self._lire_configuration()
+
+    def empreinte_donnees(self) -> str:
+        """Calcule une empreinte stable de la base et des fichiers sauvegardés."""
+
+        digest = hashlib.sha256()
+        if self.database_path.is_file():
+            digest.update(b"database\0")
+            digest.update(sha256_file(self.database_path).encode("ascii"))
+        self._ajouter_repertoire_empreinte(digest, self.assets_dir, "assets")
+        self._ajouter_repertoire_empreinte(digest, self.factures_dir, "factures")
+        return digest.hexdigest()
+
+    def executer_sauvegarde_quotidienne(self) -> AutomaticBackupResult:
+        configuration = self._lire_configuration()
+        if not configuration.activee or configuration.frequence != "QUOTIDIENNE":
+            return AutomaticBackupResult(False, "configuration_inactive")
+        if self._sauvegarde_deja_effectuee_aujourdhui(configuration.derniere_sauvegarde):
+            return AutomaticBackupResult(False, "deja_effectuee")
+        return self._executer_sauvegarde_automatique("quotidienne")
+
+    def executer_sauvegarde_fermeture(
+        self,
+        empreinte_reference: str | None,
+    ) -> AutomaticBackupResult:
+        configuration = self._lire_configuration()
+        if not configuration.activee or configuration.frequence == "MANUELLE":
+            return AutomaticBackupResult(False, "configuration_inactive")
+        if empreinte_reference is None or self.empreinte_donnees() == empreinte_reference:
+            return AutomaticBackupResult(False, "aucune_modification")
+        return self._executer_sauvegarde_automatique("fermeture")
+
+    def nettoyer_anciennes_sauvegardes(self, limite: int = 15) -> tuple[Path, ...]:
+        """Conserve les archives internes les plus récentes sans toucher aux exports manuels."""
+
+        self.backups_dir.mkdir(parents=True, exist_ok=True)
+        archives = [
+            path
+            for path in self.backups_dir.glob("*.spharm")
+            if path.name.startswith(("auto_", "avant_import_"))
+        ]
+        archives.sort(key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+        supprimees: list[Path] = []
+        for path in archives[max(0, limite) :]:
+            path.unlink(missing_ok=True)
+            supprimees.append(path)
+        return tuple(supprimees)
 
     def exporter_backup(
         self,
@@ -141,6 +287,7 @@ class BackupService:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         security_path = self.backups_dir / f"avant_import_{timestamp}.spharm"
         self._exporter(destination=security_path, utilisateur_id=None, journaliser=False)
+        self.nettoyer_anciennes_sauvegardes()
 
         self.backups_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="restore_", dir=self.backups_dir) as temp_name:
@@ -231,6 +378,83 @@ class BackupService:
             shutil.copy2(archive_temp, staged_output)
             os.replace(staged_output, output)
         return BackupExportResult(path=output, size=output.stat().st_size, created_at=created_at)
+
+    def _executer_sauvegarde_automatique(self, origine: str) -> AutomaticBackupResult:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        destination = self._destination_interne_unique(f"auto_{timestamp}.spharm")
+        result = self._exporter(
+            destination=destination,
+            utilisateur_id=None,
+            journaliser=False,
+        )
+        try:
+            with self.session_factory() as session:
+                parametre = self.parametre_repository.obtenir_principal(session)
+                if parametre is None:
+                    raise BackupInvalideError(
+                        "Les paramètres de sauvegarde sont introuvables."
+                    )
+                self.parametre_repository.enregistrer_derniere_sauvegarde(
+                    session,
+                    parametre,
+                    result.created_at,
+                )
+                self.journal_service.journaliser(
+                    session,
+                    action=ACTION_SAUVEGARDE_AUTO_CREEE,
+                    utilisateur_id=None,
+                    table_cible="parametres",
+                    element_id=parametre.id,
+                    details=f"Sauvegarde automatique {origine} créée : {result.path.name}.",
+                )
+                session.commit()
+        except Exception:
+            result.path.unlink(missing_ok=True)
+            raise
+        self.nettoyer_anciennes_sauvegardes()
+        return AutomaticBackupResult(True, origine, result.path)
+
+    def _lire_configuration(self) -> BackupSettings:
+        with self.session_factory() as session:
+            parametre = self.parametre_repository.obtenir_principal(session)
+            if parametre is None:
+                raise BackupInvalideError("Les paramètres de sauvegarde sont introuvables.")
+            return BackupSettings(
+                activee=bool(parametre.sauvegarde_auto),
+                frequence=parametre.frequence_sauvegarde,
+                derniere_sauvegarde=parametre.derniere_sauvegarde,
+                dossier=self.backups_dir,
+            )
+
+    @staticmethod
+    def _sauvegarde_deja_effectuee_aujourdhui(value: str | None) -> bool:
+        if not value:
+            return False
+        try:
+            return datetime.fromisoformat(value).date() == datetime.now().date()
+        except ValueError:
+            return False
+
+    def _destination_interne_unique(self, filename: str) -> Path:
+        destination = self.backups_dir / filename
+        suffix = 1
+        while destination.exists():
+            destination = self.backups_dir / f"{Path(filename).stem}_{suffix}.spharm"
+            suffix += 1
+        return destination
+
+    @staticmethod
+    def _ajouter_repertoire_empreinte(
+        digest: Any,
+        directory: Path,
+        label: str,
+    ) -> None:
+        if not directory.is_dir():
+            return
+        for path in sorted(item for item in directory.rglob("*") if item.is_file()):
+            digest.update(label.encode("utf-8"))
+            digest.update(path.relative_to(directory).as_posix().encode("utf-8"))
+            digest.update(sha256_file(path).encode("ascii"))
 
     def _inspecter(self, path: Path) -> BackupInfo:
         if path.suffix.lower() != ".spharm" or not path.is_file():

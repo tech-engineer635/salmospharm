@@ -1421,8 +1421,27 @@ class MainWindow(QMainWindow):
                 min-height: 36px;
                 padding: 0 12px;
             }
+            QLabel#backupMetaValue {
+                color: #173f68;
+                font-size: 12px;
+            }
+            QCheckBox#backupAutoCheckbox {
+                color: #173f68;
+                min-height: 28px;
+                spacing: 8px;
+            }
+            QComboBox#backupFrequencyCombo {
+                background-color: #ffffff;
+                border: 1px solid #cfdbe6;
+                border-radius: 6px;
+                color: #173f68;
+                min-height: 34px;
+                min-width: 250px;
+                padding: 0 10px;
+            }
             QPushButton#backupPrimaryButton,
-            QPushButton#backupSecondaryButton {
+            QPushButton#backupSecondaryButton,
+            QPushButton#backupSettingsButton {
                 border-radius: 7px;
                 font-size: 12px;
                 font-weight: 800;
@@ -1439,8 +1458,21 @@ class MainWindow(QMainWindow):
                 border: 1px solid #cfdbe6;
                 color: #0b3567;
             }
+            QPushButton#backupSettingsButton {
+                background-color: #f5f8fb;
+                border: 1px solid #cfdbe6;
+                color: #0b3567;
+            }
+            QPushButton#backupPrimaryButton:focus,
+            QPushButton#backupSecondaryButton:focus,
+            QPushButton#backupSettingsButton:focus,
+            QComboBox#backupFrequencyCombo:focus,
+            QCheckBox#backupAutoCheckbox:focus {
+                border: 2px solid #1875d1;
+            }
             QPushButton#backupPrimaryButton:disabled,
-            QPushButton#backupSecondaryButton:disabled {
+            QPushButton#backupSecondaryButton:disabled,
+            QPushButton#backupSettingsButton:disabled {
                 background-color: #eef2f5;
                 border-color: #dce3e8;
                 color: #8b98a5;
@@ -1474,6 +1506,7 @@ class MainWindow(QMainWindow):
             MainWindow[theme="dark"] QLineEdit,
             MainWindow[theme="dark"] QSpinBox,
             MainWindow[theme="dark"] QComboBox,
+            MainWindow[theme="dark"] QComboBox#backupFrequencyCombo,
             MainWindow[theme="dark"] QPushButton#dateButton,
             MainWindow[theme="dark"] QPushButton#bellButton,
             MainWindow[theme="dark"] QPushButton#menuButton {

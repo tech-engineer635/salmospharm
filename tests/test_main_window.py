@@ -435,6 +435,9 @@ def test_parametres_gerant_affiche_backup_sans_exposer_au_vendeur():
     assert panel is not None
     assert "Exporter les donnees" in button_labels
     assert "Importer une sauvegarde" in button_labels
+    assert "Enregistrer les réglages" in button_labels
+    assert panel.auto_checkbox.accessibleName() == "Activer les sauvegardes automatiques"
+    assert panel.frequency_combo.accessibleName() == "Fréquence des sauvegardes automatiques"
     assert vendeur_window.findChild(BackupPanel) is None
 
     gerant_window.close()
