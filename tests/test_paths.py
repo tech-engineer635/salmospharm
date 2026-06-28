@@ -3,6 +3,7 @@ from pathlib import Path
 from app.core.paths import (
     get_assets_dir,
     get_backups_dir,
+    get_config_dir,
     get_data_dir,
     get_database_path,
     get_exports_dir,
@@ -26,6 +27,7 @@ def test_ensure_app_directories_creates_expected_tree(tmp_path, monkeypatch):
         get_factures_dir(),
         get_exports_dir(),
         get_assets_dir(),
+        get_config_dir(),
     )
 
     for directory in expected_directories:

@@ -9,12 +9,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from PySide6.QtCore import QProcess
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from app.core.paths import ensure_app_directories
 from app.database.init_db import init_database
 from app.services.auth_service import AuthService, SessionUtilisateur
+from app.services.backup_service import BackupService
 from app.ui.first_run.manager_account_window import FirstRunWindow
 from app.ui.layouts import MainWindow
 from app.ui.login import LoginWindow
@@ -34,6 +36,20 @@ def main() -> int:
 
     auth_service = AuthService()
 
+    try:
+        BackupService().finaliser_import_apres_redemarrage()
+    except Exception:
+        QMessageBox.warning(
+            None,
+            "SALMOSPHARM",
+            "La restauration est terminee, mais sa journalisation n'a pas pu etre finalisee.",
+        )
+
+    def restart_application() -> None:
+        arguments = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve())]
+        QProcess.startDetached(sys.executable, arguments)
+        app.quit()
+
     def show_login_window() -> None:
         login_window = LoginWindow(auth_service=auth_service)
 
@@ -42,6 +58,7 @@ def main() -> int:
             app.main_window = main_window
             main_window.deconnexion_demandee.connect(main_window.close)
             main_window.deconnexion_demandee.connect(show_login_window)
+            main_window.redemarrage_demande.connect(restart_application)
             main_window.show()
             login_window.close()
 

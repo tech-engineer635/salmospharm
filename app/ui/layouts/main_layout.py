@@ -26,6 +26,7 @@ from app.ui.components.ticket_preview import TicketPreviewPage
 from app.ui.gerant.alertes import AlertesPage
 from app.ui.gerant.dashboard_page import GerantDashboardPage
 from app.ui.gerant.historique import HistoriqueActionsPage, HistoriqueVentesGerantPage
+from app.ui.gerant.parametres import BackupPanel
 from app.ui.gerant.produits import ProduitsPage
 from app.ui.gerant.rapports import RapportsPage
 from app.ui.gerant.stock import StockPage
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow):
     """Fenetre principale apres authentification, sans acces direct a SQLite."""
 
     deconnexion_demandee = Signal()
+    redemarrage_demande = Signal()
 
     def __init__(self, session_utilisateur: SessionUtilisateur) -> None:
         super().__init__()
@@ -126,7 +128,9 @@ class MainWindow(QMainWindow):
             self._add_page("historique", historique)
             self._add_page("rapports", RapportsPage(self.session_utilisateur, autoload=False))
             self._add_page("alertes", AlertesPage(self.session_utilisateur, autoload=False))
-            self._add_page("parametres", SettingsPage(self.set_theme))
+            settings = SettingsPage(self.session_utilisateur, self.set_theme)
+            settings.redemarrage_demande.connect(self.redemarrage_demande.emit)
+            self._add_page("parametres", settings)
             for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
                 self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             return
@@ -1395,6 +1399,52 @@ class MainWindow(QMainWindow):
                 border: 5px solid #0f8f3a;
                 background-color: #ffffff;
             }
+            QFrame#backupPanel {
+                background-color: #ffffff;
+                border: 1px solid #dfe8f0;
+                border-radius: 8px;
+            }
+            QLabel#backupTitle {
+                color: #073264;
+                font-size: 17px;
+                font-weight: 900;
+            }
+            QLabel#backupSubtitle,
+            QLabel#backupStatus {
+                color: #526b85;
+                font-size: 12px;
+            }
+            QLabel#backupStatus {
+                background-color: #f6f9fb;
+                border: 1px solid #e3eaf0;
+                border-radius: 6px;
+                min-height: 36px;
+                padding: 0 12px;
+            }
+            QPushButton#backupPrimaryButton,
+            QPushButton#backupSecondaryButton {
+                border-radius: 7px;
+                font-size: 12px;
+                font-weight: 800;
+                min-height: 38px;
+                padding: 0 16px;
+            }
+            QPushButton#backupPrimaryButton {
+                background-color: #108d38;
+                border: 1px solid #108d38;
+                color: #ffffff;
+            }
+            QPushButton#backupSecondaryButton {
+                background-color: #ffffff;
+                border: 1px solid #cfdbe6;
+                color: #0b3567;
+            }
+            QPushButton#backupPrimaryButton:disabled,
+            QPushButton#backupSecondaryButton:disabled {
+                background-color: #eef2f5;
+                border-color: #dce3e8;
+                color: #8b98a5;
+            }
             QLabel#profilePhoto {
                 background-color: #edf3f8;
                 border: 1px solid #d9e3ea;
@@ -1412,7 +1462,8 @@ class MainWindow(QMainWindow):
             MainWindow[theme="dark"] QFrame#contentPanel,
             MainWindow[theme="dark"] QFrame#statCard,
             MainWindow[theme="dark"] QFrame#productMetricCard,
-            MainWindow[theme="dark"] QFrame#placeholderCard {
+            MainWindow[theme="dark"] QFrame#placeholderCard,
+            MainWindow[theme="dark"] QFrame#backupPanel {
                 background-color: #1f2937;
                 border-color: #374151;
             }
@@ -1461,10 +1512,18 @@ class PlaceholderPage(QWidget):
 
 
 class SettingsPage(QWidget):
-    """Parametres UI temporaires de Phase 10, sans persistance."""
+    """Parametres visuels et sauvegarde locale reserves au gerant."""
 
-    def __init__(self, set_theme_callback, parent: QWidget | None = None) -> None:
+    redemarrage_demande = Signal()
+
+    def __init__(
+        self,
+        session_utilisateur: SessionUtilisateur,
+        set_theme_callback,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
+        self.session_utilisateur = session_utilisateur
         self._set_theme_callback = set_theme_callback
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1499,6 +1558,9 @@ class SettingsPage(QWidget):
         card_layout.addWidget(text)
         card_layout.addLayout(choices)
         layout.addWidget(card)
+        self.backup_panel = BackupPanel(session_utilisateur)
+        self.backup_panel.restart_requested.connect(self.redemarrage_demande.emit)
+        layout.addWidget(self.backup_panel)
         layout.addStretch(1)
 
     def _apply_choice(self) -> None:

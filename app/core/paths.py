@@ -47,6 +47,14 @@ def get_assets_dir() -> Path:
     return get_user_data_dir() / "assets"
 
 
+def get_config_dir() -> Path:
+    return get_user_data_dir() / "config"
+
+
+def get_restore_marker_path() -> Path:
+    return get_config_dir() / "restore_pending.json"
+
+
 def get_database_path() -> Path:
     return get_data_dir() / DATABASE_FILE_NAME
 
@@ -60,6 +68,7 @@ def iter_app_directories() -> tuple[Path, ...]:
         get_factures_dir(),
         get_exports_dir(),
         get_assets_dir(),
+        get_config_dir(),
     )
 
 

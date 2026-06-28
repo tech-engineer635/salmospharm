@@ -12,6 +12,7 @@ from app.services.produit_service import ProduitPayload
 from app.services.vente_service import ProduitVendable
 from app.services.utilisateur_service import VendeurDashboardData, VendeurListItem, VendeurMetrics
 from app.ui.gerant.produits import ProduitsPage
+from app.ui.gerant.parametres import BackupPanel
 from app.ui.gerant.rapports import RapportsPage
 from app.ui.gerant.stock import StockPage
 from app.ui.gerant.vendeurs import VendeursPage
@@ -417,6 +418,27 @@ def test_vendeur_ne_voit_pas_menus_gerant_et_voit_menus_vendeur():
     assert window.topbar.title_label.text() == "Recherche produit"
 
     window.close()
+    app.processEvents()
+
+
+def test_parametres_gerant_affiche_backup_sans_exposer_au_vendeur():
+    app = _app()
+    gerant_window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
+    vendeur_window = MainWindow(session_utilisateur=_session(ROLE_VENDEUR))
+
+    gerant_window.navigate("parametres")
+    panel = gerant_window.findChild(BackupPanel)
+    button_labels = {
+        button.text().strip() for button in panel.findChildren(QPushButton)
+    }
+
+    assert panel is not None
+    assert "Exporter les donnees" in button_labels
+    assert "Importer une sauvegarde" in button_labels
+    assert vendeur_window.findChild(BackupPanel) is None
+
+    gerant_window.close()
+    vendeur_window.close()
     app.processEvents()
 
 

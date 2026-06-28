@@ -1006,3 +1006,13 @@ Resultats :
 - Reproduction de la maquette avec cartes alternees, histogramme annote, donut avec legende complete et tableau vendeur totalise.
 - Deux filtres de date accessibles, etat vide explicite et absence de defilement a 1450 x 900.
 - Export du rapport affiche en classeur Excel reserve au gerant.
+
+## Phase 18 - Backup et restauration
+
+- Ajout du format `.spharm` avec base SQLite coherente, manifeste JSON, assets et factures.
+- Export SQLite realise avec l'API `backup()` et journalise par `BACKUP_EXPORTE`.
+- Validation du checksum SHA-256, du schema, de `integrity_check`, des cles et des chemins ZIP.
+- Import reserve au gerant avec sauvegarde `.spharm` obligatoire avant remplacement.
+- Remplacement de la base et des fichiers avec rollback automatique en cas d'echec.
+- Finalisation de `BACKUP_IMPORTE` dans la base restauree au redemarrage.
+- Ajout du panneau Sauvegarde et restauration dans les Parametres gerant.
