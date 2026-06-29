@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from app.core.exceptions import ValidationError
 from app.services.auth_service import AuthService
 from app.ui.components.icons import ui_icon
+from app.ui.components.field_contrast import appliquer_contraste_champs
 
 
 class FirstRunWindow(QMainWindow):
@@ -44,6 +45,8 @@ class FirstRunWindow(QMainWindow):
 
         self._build_ui()
         self._apply_style()
+        appliquer_contraste_champs(self)
+        self.nom_input.setFocus()
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -151,7 +154,7 @@ class FirstRunWindow(QMainWindow):
         options = QHBoxLayout(options_container)
         options.setSpacing(40)
         options.setContentsMargins(0, 10, 0, 6)
-        self.accept_checkbox = QCheckBox("J'accepte de creer ce compte comme\nadministrateur principal.")
+        self.accept_checkbox = QCheckBox("J'accepte de creer ce compte comme\ngerant principal.")
         self.accept_checkbox.setObjectName("acceptCheck")
         self.accept_checkbox.setChecked(True)
         self.show_password_checkbox = QCheckBox("Afficher le mot de passe")
@@ -169,12 +172,16 @@ class FirstRunWindow(QMainWindow):
         cancel_button.setObjectName("secondaryButton")
         cancel_button.clicked.connect(self.close)
 
-        submit_button = QPushButton("Creer le compte du gerant")
-        submit_button.setObjectName("primaryButton")
-        submit_button.clicked.connect(self._submit)
+        self.submit_button = QPushButton("Creer le compte du gerant")
+        self.submit_button.setObjectName("primaryButton")
+        self.submit_button.clicked.connect(self._submit)
+        self.submit_button.setDefault(True)
+        self.submit_button.setAutoDefault(True)
+        self.submit_button.setAccessibleName("Creer le compte du gerant")
+        self.confirm_password_input.returnPressed.connect(self._submit)
         actions.addWidget(cancel_button, 1)
         actions.addStretch(1)
-        actions.addWidget(submit_button, 3)
+        actions.addWidget(self.submit_button, 3)
         card_layout.addLayout(actions)
 
         login_link = QLabel("<a href='#'>J'ai deja un compte</a>")
@@ -202,12 +209,15 @@ class FirstRunWindow(QMainWindow):
         label.setObjectName("fieldLabel")
         label.setMinimumHeight(20)
         layout.addWidget(label)
+        label.setBuddy(input_widget)
         layout.addWidget(input_widget)
         return wrapper
 
     def _create_input(self, placeholder: str, password: bool = False) -> QLineEdit:
         line_edit = QLineEdit()
         line_edit.setPlaceholderText(placeholder)
+        line_edit.setAccessibleName(placeholder)
+        line_edit.setAccessibleDescription(placeholder)
         line_edit.setFixedHeight(52)
         line_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         if password:
@@ -489,9 +499,12 @@ class RecoveryCodeDialog(QDialog):
 
         close_button = QPushButton("J'ai conserve le code")
         close_button.setMinimumHeight(46)
+        close_button.setDefault(True)
+        close_button.setAccessibleName("Confirmer la conservation du code")
         close_button.clicked.connect(self.accept)
 
         layout.addWidget(title)
         layout.addWidget(message) 
         layout.addWidget(code)
         layout.addWidget(close_button)
+        appliquer_contraste_champs(self)

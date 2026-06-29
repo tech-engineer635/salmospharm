@@ -23,6 +23,30 @@ class ParametreRepository:
         session.flush()
         return parametre
 
+    def mettre_a_jour_general(
+        self,
+        session: Session,
+        parametre: Parametre,
+        *,
+        nom_pharmacie: str,
+        telephone: str | None,
+        adresse: str | None,
+        seuil_expiration_jours: int,
+        nom_imprimante: str | None,
+        largeur_ticket: int,
+        impression_auto: bool,
+    ) -> Parametre:
+        parametre.nom_pharmacie = nom_pharmacie
+        parametre.telephone = telephone
+        parametre.adresse = adresse
+        parametre.seuil_expiration_jours = seuil_expiration_jours
+        parametre.nom_imprimante = nom_imprimante
+        parametre.largeur_ticket = largeur_ticket
+        parametre.impression_auto = int(impression_auto)
+        parametre.modifie_le = func.current_timestamp()
+        session.flush()
+        return parametre
+
     def configurer_sauvegarde(
         self,
         session: Session,

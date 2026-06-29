@@ -33,6 +33,7 @@ from app.repositories.lot_produit_repository import LotProduitRepository
 from app.repositories.produit_repository import ProduitRepository
 from app.repositories.stock_repository import StockRepository
 from app.services.alerte_service import AlerteService
+from app.services.alert_events import publier_evenement_alerte
 from app.services.auth_service import SessionUtilisateur
 from app.services.journal_service import JournalService
 from app.utils.excel import convertir_date, convertir_datetime, creer_classeur_tableau, enregistrer_classeur
@@ -267,6 +268,7 @@ class StockService:
                 session.rollback()
                 raise ValidationError("Impossible d'enregistrer l'entree de stock.") from exc
 
+            publier_evenement_alerte(produit.id)
             return StockOperationResult(lot=lot, mouvement=mouvement, alertes_creees=len(alertes))
 
     def ajuster_stock(self, utilisateur: SessionUtilisateur, payload: AjustementStockPayload) -> StockOperationResult:
@@ -309,6 +311,7 @@ class StockService:
             )
             session.commit()
 
+            publier_evenement_alerte(produit.id)
             return StockOperationResult(lot=lot, mouvement=mouvement, alertes_creees=len(alertes))
 
     def _valider_entree(self, payload: EntreeStockPayload) -> EntreeStockPayload:

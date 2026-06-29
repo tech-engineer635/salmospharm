@@ -4,7 +4,8 @@ from datetime import date
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCharts import QChartView
-from PySide6.QtWidgets import QApplication, QDateEdit
+from PySide6.QtGui import QPalette
+from PySide6.QtWidgets import QApplication, QComboBox, QDateEdit, QLabel, QLineEdit, QWidget
 
 from app.core.constants import ROLE_GERANT
 from app.services.auth_service import SessionUtilisateur
@@ -16,6 +17,7 @@ from app.services.rapport_service import (
 )
 from app.ui.components.charts import DonutChart, ProgressDonutChart, SalesBarChart, SalesLineChart
 from app.ui.components.icons import ui_icon
+from app.ui.components.field_contrast import appliquer_contraste_champs
 from app.ui.gerant.rapports import RapportsPage
 
 
@@ -47,6 +49,42 @@ def test_tous_les_graphiques_utilisent_qtcharts():
     assert bars.chart().series()
     assert donut.chart().series()
     assert progress.chart().series()
+
+
+def test_contraste_des_champs_reste_lisible_actif_et_desactive():
+    _app()
+    root = QWidget()
+    field = QLineEdit(root)
+    label = QLabel("Nom du champ", root)
+    field.setPlaceholderText("Texte indicatif")
+
+    appliquer_contraste_champs(root)
+    palette = field.palette()
+
+    assert palette.color(QPalette.ColorRole.Text).name() == "#17324d"
+    assert palette.color(QPalette.ColorRole.PlaceholderText).name() == "#66788a"
+    assert (
+        palette.color(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text
+        ).name()
+        == "#526579"
+    )
+    assert label.palette().color(QPalette.ColorRole.WindowText).name() == "#17324d"
+
+
+def test_contraste_du_popup_dropdown_reste_lisible():
+    _app()
+    root = QWidget()
+    combo = QComboBox(root)
+    combo.addItems(["Toutes les alertes actives", "Non lues"])
+
+    appliquer_contraste_champs(root)
+    popup_palette = combo.view().palette()
+
+    assert popup_palette.color(QPalette.ColorRole.Base).name() == "#ffffff"
+    assert popup_palette.color(QPalette.ColorRole.Text).name() == "#17324d"
+    assert popup_palette.color(QPalette.ColorRole.Highlight).name() == "#0b5fa5"
+    assert popup_palette.color(QPalette.ColorRole.HighlightedText).name() == "#ffffff"
 
 
 def test_page_rapports_utilise_periode_graphiques_et_total_vendeurs():

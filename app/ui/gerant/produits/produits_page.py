@@ -76,6 +76,9 @@ class ProduitsPage(QWidget):
         side_column = QVBoxLayout()
         side_column.setSpacing(8)
         side_column.addWidget(self._build_filters_panel())
+        self.category_panel = self._build_category_panel()
+        self.category_panel.setVisible(False)
+        side_column.addWidget(self.category_panel)
         side_column.addWidget(self._build_product_panel(), 1)
 
         body.addLayout(main_column, 1)
@@ -101,6 +104,7 @@ class ProduitsPage(QWidget):
         self.search_input.addAction(ui_icon("search", "#0b3567", 18), QLineEdit.ActionPosition.TrailingPosition)
         self.search_input.textChanged.connect(self._charger_produits)
         self.search_input.setMaximumWidth(380)
+        self.search_input.setAccessibleName("Rechercher un produit")
 
         header.addLayout(text, 1)
         header.addWidget(self.search_input)
@@ -126,11 +130,14 @@ class ProduitsPage(QWidget):
         new_button.setIcon(ui_icon("plus", "#ffffff", 18))
         new_button.clicked.connect(self._vider_formulaire_produit)
 
-        import_button = QPushButton("Importer")
-        import_button.setObjectName("outlineButton")
-        import_button.setIcon(ui_icon("upload", "#0b3567", 17))
-        import_button.setEnabled(False)
-        import_button.setToolTip("Import catalogue a traiter dans un workflow dedie.")
+        category_button = QPushButton("Categories")
+        category_button.setObjectName("outlineButton")
+        category_button.setAccessibleName("Afficher la creation de categorie")
+        category_button.clicked.connect(
+            lambda: self.category_panel.setVisible(
+                not self.category_panel.isVisible()
+            )
+        )
 
         self.export_button = QPushButton("Export Excel")
         self.export_button.setObjectName("outlineButton")
@@ -144,7 +151,7 @@ class ProduitsPage(QWidget):
         filter_button.clicked.connect(lambda: self.filter_category_combo.setFocus())
 
         toolbar.addWidget(new_button)
-        toolbar.addWidget(import_button)
+        toolbar.addWidget(category_button)
         toolbar.addWidget(self.export_button)
         toolbar.addStretch(1)
         toolbar.addWidget(filter_button)
@@ -161,11 +168,15 @@ class ProduitsPage(QWidget):
         title.setObjectName("panelTitle")
         self.category_name_input = QLineEdit()
         self.category_name_input.setPlaceholderText("Nom de la categorie")
+        self.category_name_input.setAccessibleName("Nom de la categorie")
         self.category_description_input = QLineEdit()
         self.category_description_input.setPlaceholderText("Description")
+        self.category_description_input.setAccessibleName("Description de la categorie")
         create_button = QPushButton("Ajouter la categorie")
         create_button.setObjectName("primaryButton")
         create_button.clicked.connect(self._creer_categorie)
+        create_button.setDefault(False)
+        self.category_name_input.returnPressed.connect(create_button.click)
 
         layout.addWidget(title)
         layout.addWidget(self.category_name_input)
@@ -197,7 +208,6 @@ class ProduitsPage(QWidget):
         self.category_combo = QComboBox()
         self.description_input = QLineEdit()
         self.description_input.setPlaceholderText("Description courte")
-        self.description_input.setVisible(False)
         self.active_hint = QCheckBox("Produit actif")
         self.active_hint.setChecked(True)
         self.active_hint.setEnabled(False)
@@ -220,6 +230,8 @@ class ProduitsPage(QWidget):
         self.save_button = QPushButton("Ajouter le produit")
         self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self._enregistrer_produit)
+        self.save_button.setAccessibleName("Enregistrer le produit")
+        self.product_name_input.returnPressed.connect(self._enregistrer_produit)
         self.clear_button = QPushButton("Annuler")
         self.clear_button.setObjectName("outlineButton")
         self.clear_button.clicked.connect(self._vider_formulaire_produit)
@@ -236,8 +248,14 @@ class ProduitsPage(QWidget):
         layout.addWidget(self.product_name_input)
         layout.addWidget(_field_label("Categorie *"))
         layout.addWidget(self.category_combo)
-        layout.addWidget(_field_label("Code-barres"))
-        layout.addWidget(self.barcode_input)
+        optional_grid = QGridLayout()
+        optional_grid.setHorizontalSpacing(8)
+        optional_grid.setVerticalSpacing(2)
+        optional_grid.addWidget(_field_label("Code-barres"), 0, 0)
+        optional_grid.addWidget(_field_label("Description"), 0, 1)
+        optional_grid.addWidget(self.barcode_input, 1, 0)
+        optional_grid.addWidget(self.description_input, 1, 1)
+        layout.addLayout(optional_grid)
         layout.addLayout(grid)
         layout.addWidget(self.active_hint)
         layout.addWidget(self.product_status_hint)
@@ -245,6 +263,17 @@ class ProduitsPage(QWidget):
         layout.addStretch(1)
         layout.addLayout(actions)
         return panel
+
+    def appliquer_recherche(self, terme: str) -> None:
+        self.search_input.setText(terme)
+        self.search_input.setFocus()
+
+    def selectionner_produit(self, produit_id: int) -> None:
+        for row, produit in enumerate(self._produits_affiches):
+            if produit.id == produit_id:
+                self.products_table.selectRow(row)
+                self.products_table.scrollToItem(self.products_table.item(row, 0))
+                return
 
     def _build_list_panel(self) -> QFrame:
         panel = QFrame()

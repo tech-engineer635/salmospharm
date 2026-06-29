@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
-    QFileDialog,
+    QAbstractButton,
+    QAbstractItemView,
+    QComboBox,
+    QGridLayout,
     QHBoxLayout,
     QFrame,
     QLabel,
     QMainWindow,
+    QLineEdit,
     QScrollArea,
     QStackedWidget,
     QPushButton,
@@ -21,11 +22,17 @@ from PySide6.QtWidgets import (
 
 from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
 from app.services.auth_service import SessionUtilisateur
+from app.services.alert_coordinator import AlertCoordinator
 from app.ui.components.ticket_preview import TicketPreviewPage
+from app.ui.components.field_contrast import appliquer_contraste_champs
 from app.ui.gerant.alertes import AlertesPage
 from app.ui.gerant.dashboard_page import GerantDashboardPage
 from app.ui.gerant.historique import HistoriqueActionsPage, HistoriqueVentesGerantPage
 from app.ui.gerant.parametres import BackupPanel
+from app.ui.gerant.parametres.settings_panel import (
+    GeneralSettingsPanel,
+    SecuritySettingsPanel,
+)
 from app.ui.gerant.produits import ProduitsPage
 from app.ui.gerant.rapports import RapportsPage
 from app.ui.gerant.stock import StockPage
@@ -35,6 +42,7 @@ from app.ui.layouts.topbar import Topbar
 from app.ui.vendeur.dashboard_page import VendeurDashboardPage
 from app.ui.vendeur.historique_ventes import HistoriqueVentesVendeurPage
 from app.ui.vendeur.nouvelle_vente import NouvelleVentePage
+from app.ui.vendeur.recherche_produit_page import RechercheProduitPage
 
 
 APP_TITLE = "SALMOSPHARM 133"
@@ -46,32 +54,50 @@ class MainWindow(QMainWindow):
     deconnexion_demandee = Signal()
     redemarrage_demande = Signal()
 
-    def __init__(self, session_utilisateur: SessionUtilisateur) -> None:
+    def __init__(
+        self,
+        session_utilisateur: SessionUtilisateur,
+        alert_coordinator: AlertCoordinator | None = None,
+    ) -> None:
         super().__init__()
         self.session_utilisateur = session_utilisateur
         self._pages: dict[str, int] = {}
         self._page_widgets: dict[str, QWidget] = {}
-        self._theme = "light"
+        self._alert_coordinator = alert_coordinator
         self.setWindowTitle(APP_TITLE)
         self.setMinimumSize(1080, 680)
         self.resize(1320, 820)
         self._build_ui()
         self._apply_style()
+        self._apply_accessibility()
+        appliquer_contraste_champs(self)
         self.navigate("dashboard")
 
     def toggle_sidebar(self) -> None:
         self.sidebar.setHidden(not self.sidebar.isHidden())
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "sidebar") and self.width() < 1500:
+            self.sidebar.hide()
+        settings = getattr(self, "_page_widgets", {}).get("parametres")
+        if settings is not None and hasattr(settings, "set_compact"):
+            settings.set_compact(self.width() < 1200)
+        for key in ("vendeurs", "rapports"):
+            page = getattr(self, "_page_widgets", {}).get(key)
+            if page is not None and hasattr(page, "set_compact"):
+                page.set_compact(self.width() < 1200)
+
     def navigate(self, key: str) -> None:
         if key not in self._pages:
             return
-        if self.sidebar.isHidden():
-            self.sidebar.show()
         self.content_stack.setCurrentIndex(self._pages[key])
         self.sidebar.set_active(key)
         self.topbar.set_title(self._page_title_for_session(key))
         self.topbar.set_reports_mode(key == "rapports")
         page = self._page_widgets.get(key)
+        if page is not None and hasattr(page, "set_compact"):
+            page.set_compact(self.width() < 1200)
         if page is not None and hasattr(page, "on_show"):
             page.on_show()
 
@@ -82,10 +108,9 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        self.sidebar = Sidebar(self.session_utilisateur.role)
+        self.sidebar = Sidebar(self.session_utilisateur)
         self.sidebar.navigation_demandee.connect(self.navigate)
         self.sidebar.deconnexion_demandee.connect(self.deconnexion_demandee.emit)
-        self.sidebar.profil_demande.connect(lambda: self.navigate("profil"))
         root_layout.addWidget(self.sidebar)
 
         workspace = QWidget()
@@ -97,6 +122,10 @@ class MainWindow(QMainWindow):
         self.topbar = Topbar(self.session_utilisateur)
         self.topbar.deconnexion_demandee.connect(self.deconnexion_demandee.emit)
         self.topbar.menu_demande.connect(self.toggle_sidebar)
+        self.topbar.recherche_demandee.connect(self._rechercher_produit)
+        self.topbar.alertes_demandees.connect(self._ouvrir_alertes)
+        if self._alert_coordinator is not None:
+            self._alert_coordinator.alerts_updated.connect(self._actualiser_alertes)
         workspace_layout.addWidget(self.topbar)
 
         self.content_stack = QStackedWidget()
@@ -107,15 +136,15 @@ class MainWindow(QMainWindow):
         self._register_pages()
 
     def _register_pages(self) -> None:
-        profile_page = ProfilePage(self.session_utilisateur)
-        profile_page.photo_changee.connect(self.sidebar.set_profile_photo)
-        self._add_page("profil", profile_page)
         if self.session_utilisateur.role == ROLE_GERANT:
-            dashboard = GerantDashboardPage()
+            dashboard = GerantDashboardPage(self.session_utilisateur)
             dashboard.voir_tout_demande.connect(self.navigate)
             self._add_page("dashboard", dashboard)
             self._add_page("produits", ProduitsPage(self.session_utilisateur, autoload=False))
             self._add_page("stock", StockPage(self.session_utilisateur, autoload=False))
+            nouvelle_vente = NouvelleVentePage(self.session_utilisateur, autoload=False)
+            nouvelle_vente.ticket_genere.connect(self._afficher_ticket)
+            self._add_page("nouvelle_vente", nouvelle_vente)
             facture_page = TicketPreviewPage(self.session_utilisateur)
             facture_page.retour_demande.connect(lambda: self.navigate("dashboard"))
             self._add_page("factures", facture_page)
@@ -126,12 +155,13 @@ class MainWindow(QMainWindow):
             self._add_page("ventes", ventes_page)
             self._add_page("historique", historique)
             self._add_page("rapports", RapportsPage(self.session_utilisateur, autoload=False))
-            self._add_page("alertes", AlertesPage(self.session_utilisateur, autoload=False))
+            alertes_page = AlertesPage(self.session_utilisateur, autoload=False)
+            alertes_page.compteur_change.connect(self.topbar.set_alert_count)
+            alertes_page.produit_demande.connect(self._ouvrir_produit)
+            self._add_page("alertes", alertes_page)
             settings = SettingsPage(self.session_utilisateur)
             settings.redemarrage_demande.connect(self.redemarrage_demande.emit)
             self._add_page("parametres", settings)
-            for key in ("details_top_produits", "details_vendeurs", "details_activites", "details_alertes"):
-                self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
             return
 
         if self.session_utilisateur.role == ROLE_VENDEUR:
@@ -147,15 +177,14 @@ class MainWindow(QMainWindow):
             historique = HistoriqueVentesVendeurPage(self.session_utilisateur, autoload=False)
             historique.ticket_demande.connect(self._afficher_ticket)
             self._add_page("historique_ventes", historique)
-            for key in ("produits",):
-                self._add_page(key, PlaceholderPage(_page_title(key), _placeholder_text(key)))
-            self._add_page("details_ventes_recentes", PlaceholderPage(_page_title("details_ventes_recentes"), _placeholder_text("details_ventes_recentes")))
+            self._add_page("produits", RechercheProduitPage(self.session_utilisateur))
 
     def _add_page(self, key: str, page: QWidget) -> None:
         scroll = QScrollArea()
         scroll.setObjectName("pageScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         container = QWidget()
         container.setObjectName("pageContainer")
         layout = QVBoxLayout(container)
@@ -174,17 +203,55 @@ class MainWindow(QMainWindow):
         self._pages[key] = self.content_stack.addWidget(scroll)
         self._page_widgets[key] = page
 
+    def _apply_accessibility(self) -> None:
+        """Complete les noms accessibles sans remplacer les libelles metier."""
+
+        for widget in self.findChildren(QWidget):
+            if widget.accessibleName():
+                continue
+            name = ""
+            if isinstance(widget, QAbstractButton):
+                name = widget.text().strip() or widget.toolTip()
+            elif isinstance(widget, QLineEdit):
+                name = widget.placeholderText()
+            elif isinstance(widget, QComboBox):
+                name = widget.currentText()
+            elif isinstance(widget, QAbstractItemView):
+                name = widget.objectName().replace("_", " ")
+            if name:
+                widget.setAccessibleName(name)
+
     def _afficher_ticket(self, ticket: object, message: str) -> None:
         page = self._page_widgets.get("factures")
         if page is not None and hasattr(page, "set_ticket"):
             page.set_ticket(ticket, message)
         self.navigate("factures")
 
-    def set_theme(self, theme: str) -> None:
-        self._theme = "dark" if theme == "dark" else "light"
-        self.setProperty("theme", self._theme)
-        self.style().unpolish(self)
-        self.style().polish(self)
+    def _rechercher_produit(self, terme: str) -> None:
+        key = "produits"
+        self.navigate(key)
+        page = self._page_widgets.get(key)
+        if page is not None and hasattr(page, "appliquer_recherche"):
+            page.appliquer_recherche(terme)
+        elif page is not None and hasattr(page, "search_input"):
+            page.search_input.setText(terme)
+            page.search_input.setFocus()
+
+    def _ouvrir_alertes(self) -> None:
+        if self.session_utilisateur.role == ROLE_GERANT:
+            self.navigate("alertes")
+
+    def _actualiser_alertes(self) -> None:
+        for key in ("alertes", "dashboard"):
+            page = self._page_widgets.get(key)
+            if page is not None and hasattr(page, "on_show"):
+                page.on_show()
+
+    def _ouvrir_produit(self, produit_id: int) -> None:
+        self.navigate("produits")
+        page = self._page_widgets.get("produits")
+        if page is not None and hasattr(page, "selectionner_produit"):
+            page.selectionner_produit(produit_id)
 
     def _page_title_for_session(self, key: str) -> str:
         if self.session_utilisateur.role == ROLE_VENDEUR and key == "produits":
@@ -325,6 +392,13 @@ class MainWindow(QMainWindow):
             QSpinBox:focus,
             QComboBox:focus {
                 border-color: #16a33a;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #ffffff;
+                color: #17324d;
+                selection-background-color: #0b5fa5;
+                selection-color: #ffffff;
+                outline: none;
             }
             QCheckBox {
                 color: #334e68;
@@ -1390,6 +1464,14 @@ class MainWindow(QMainWindow):
                 font-size: 17px;
                 font-weight: 900;
             }
+            QWidget#settingsPage QLabel {
+                color: #17324d;
+            }
+            QWidget#settingsPage QLabel#settingsFieldLabel {
+                color: #102f50;
+                font-size: 13px;
+                font-weight: 700;
+            }
             QLabel#backupSubtitle,
             QLabel#backupStatus {
                 color: #526b85;
@@ -1451,6 +1533,14 @@ class MainWindow(QMainWindow):
             QCheckBox#backupAutoCheckbox:focus {
                 border: 2px solid #1875d1;
             }
+            QPushButton:focus,
+            QLineEdit:focus,
+            QSpinBox:focus,
+            QComboBox:focus,
+            QDateEdit:focus,
+            QTableWidget:focus {
+                border: 2px solid #1875d1;
+            }
             QPushButton#backupPrimaryButton:disabled,
             QPushButton#backupSecondaryButton:disabled,
             QPushButton#backupSettingsButton:disabled {
@@ -1499,32 +1589,6 @@ class MainWindow(QMainWindow):
         )
 
 
-class PlaceholderPage(QWidget):
-    """Page neutre pour valider navigation et structure, sans logique metier."""
-
-    def __init__(self, title: str, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
-
-        card = QFrame()
-        card.setObjectName("placeholderCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 22, 24, 22)
-        card_layout.setSpacing(10)
-
-        title_label = QLabel(title)
-        title_label.setObjectName("placeholderTitle")
-        text_label = QLabel(text)
-        text_label.setObjectName("placeholderText")
-        text_label.setWordWrap(True)
-        card_layout.addWidget(title_label)
-        card_layout.addWidget(text_label)
-        layout.addWidget(card)
-        layout.addStretch(1)
-
-
 class SettingsPage(QWidget):
     """Sauvegarde locale et restauration réservées au gérant."""
 
@@ -1536,6 +1600,7 @@ class SettingsPage(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("settingsPage")
         self.session_utilisateur = session_utilisateur
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1543,68 +1608,34 @@ class SettingsPage(QWidget):
 
         self.backup_panel = BackupPanel(session_utilisateur)
         self.backup_panel.restart_requested.connect(self.redemarrage_demande.emit)
-        layout.addWidget(self.backup_panel)
+        self.settings_grid = QGridLayout()
+        self.settings_grid.setSpacing(16)
+        self.general_panel = GeneralSettingsPanel(session_utilisateur)
+        self.security_panel = SecuritySettingsPanel(session_utilisateur)
+        self.settings_grid.addWidget(self.general_panel, 0, 0)
+        self.settings_grid.addWidget(self.security_panel, 0, 1)
+        self.settings_grid.addWidget(self.backup_panel, 1, 1)
+        layout.addLayout(self.settings_grid)
         layout.addStretch(1)
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.set_compact(self.window().width() < 1200)
 
-class ProfilePage(QWidget):
-    """Page profil locale pour choisir une photo, sans ecriture base."""
-
-    photo_changee = Signal(QPixmap)
-
-    def __init__(self, session_utilisateur: SessionUtilisateur, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.session_utilisateur = session_utilisateur
-        self.photo_label = QLabel("o")
-        self._build_ui()
-
-    def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
-
-        card = QFrame()
-        card.setObjectName("placeholderCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 22, 24, 22)
-        card_layout.setSpacing(14)
-
-        title = QLabel("Profil utilisateur")
-        title.setObjectName("placeholderTitle")
-        subtitle = QLabel(f"{self.session_utilisateur.nom} - {self.session_utilisateur.role}")
-        subtitle.setObjectName("placeholderText")
-
-        self.photo_label.setObjectName("profilePhoto")
-        self.photo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.photo_label.setFixedSize(120, 120)
-
-        photo_button = QPushButton("Choisir une photo de profil")
-        photo_button.setObjectName("photoButton")
-        photo_button.clicked.connect(self._choose_photo)
-
-        card_layout.addWidget(title)
-        card_layout.addWidget(subtitle)
-        card_layout.addWidget(self.photo_label, alignment=Qt.AlignmentFlag.AlignLeft)
-        card_layout.addWidget(photo_button, alignment=Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(card)
-        layout.addStretch(1)
-
-    def _choose_photo(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Choisir une photo de profil",
-            "",
-            "Images (*.png *.jpg *.jpeg *.bmp)",
+    def set_compact(self, compact: bool) -> None:
+        self.settings_grid.addWidget(self.general_panel, 0, 0, 1, 1)
+        self.settings_grid.addWidget(
+            self.security_panel, 1, 0
         )
-        if not file_path:
-            return
-
-        pixmap = QPixmap(file_path)
-        if pixmap.isNull():
-            return
-        self.photo_label.setText("")
-        self.photo_label.setPixmap(_circular_pixmap(pixmap, 120))
-        self.photo_changee.emit(pixmap)
+        self.settings_grid.addWidget(
+            self.backup_panel,
+            2 if compact else 0,
+            0 if compact else 1,
+            1 if compact else 2,
+            1,
+        )
+        self.settings_grid.invalidate()
+        self.updateGeometry()
 
 
 def _page_title(key: str) -> str:
@@ -1621,59 +1652,5 @@ def _page_title(key: str) -> str:
         "parametres": "Parametres",
         "nouvelle_vente": "Nouvelle vente",
         "historique_ventes": "Historique des ventes",
-        "profil": "Profil utilisateur",
-        "details_top_produits": "Top produits vendus",
-        "details_vendeurs": "Synthese par vendeur",
-        "details_activites": "Activites recentes",
-        "details_alertes": "Alertes rapides",
-        "details_ventes_recentes": "Ventes recentes",
     }
     return titles.get(key, "SALMOSPHARM")
-
-
-def _placeholder_text(key: str) -> str:
-    texts = {
-        "produits": "Gestion du catalogue a venir. Cette page n'accede pas encore aux donnees.",
-        "stock": "Suivi des lots et mouvements a brancher dans les phases metier suivantes.",
-        "ventes": "Consultation des ventes validees a venir. Aucune annulation ne sera proposee.",
-        "factures": "Placeholder de consultation des recus. Aucune table factures n'est creee.",
-        "rapports": "Placeholder de rapports calcules plus tard. Aucune table rapports n'est creee.",
-        "vendeurs": "Gestion des comptes vendeurs reservee au gerant dans une phase suivante.",
-        "historique": "Historique systeme a connecter plus tard via les services autorises.",
-        "alertes": "Alertes stock et expiration a connecter plus tard.",
-        "parametres": "Parametres gerant a venir. Devise CDF et paiement especes resteront fixes.",
-        "nouvelle_vente": "Ecran de vente a venir. La validation passera par vente_service.",
-        "historique_ventes": "Historique personnel du vendeur a connecter plus tard.",
-        "details_top_produits": "Interface detaillee placeholder pour consulter tous les produits les plus vendus.",
-        "details_vendeurs": "Interface detaillee placeholder pour consulter toute la synthese par vendeur.",
-        "details_activites": "Interface detaillee placeholder pour consulter toutes les activites recentes.",
-        "details_alertes": "Interface detaillee placeholder pour consulter toutes les alertes rapides.",
-        "details_ventes_recentes": "Interface detaillee placeholder pour consulter toutes les ventes recentes.",
-    }
-    return texts.get(key, "Page placeholder de la Phase 10.")
-
-
-def _asset_path(file_name: str) -> Path:
-    return Path(__file__).resolve().parents[2] / "assets" / file_name
-
-
-def _circular_pixmap(source: QPixmap, size: int) -> QPixmap:
-    scaled = source.scaled(
-        size,
-        size,
-        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-        Qt.TransformationMode.SmoothTransformation,
-    )
-    result = QPixmap(size, size)
-    result.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(result)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    path = QPainterPath()
-    path.addEllipse(0, 0, size, size)
-    painter.setClipPath(path)
-    x = int((size - scaled.width()) / 2)
-    y = int((size - scaled.height()) / 2)
-    painter.drawPixmap(x, y, scaled)
-    painter.end()
-    return result

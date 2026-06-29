@@ -14,6 +14,7 @@ from app.core.constants import (
     ACTION_CONNEXION_REUSSIE,
     ACTION_UTILISATEUR_CREE,
     ACTION_UTILISATEUR_DESACTIVE,
+    ACTION_UTILISATEUR_MODIFIE,
     ACTION_UTILISATEUR_REACTIVE,
     ROLE_VENDEUR,
 )
@@ -41,6 +42,13 @@ class VendeurPayload:
     nom_complet: str
     identifiant: str
     mot_de_passe: str
+
+
+@dataclass(frozen=True)
+class ModificationVendeurPayload:
+    nom_complet: str
+    identifiant: str
+    nouveau_mot_de_passe: str = ""
 
 
 @dataclass(frozen=True)
@@ -173,6 +181,48 @@ class UtilisateurService:
                 table_cible="utilisateurs",
                 element_id=vendeur.id,
                 details=f"Vendeur desactive: {vendeur.email}.",
+            )
+            session.commit()
+
+    def modifier_vendeur(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        vendeur_id: int,
+        payload: ModificationVendeurPayload,
+    ) -> None:
+        exiger_permission(utilisateur.role, PERMISSION_MODIFIER_UTILISATEUR)
+        nom = payload.nom_complet.strip()
+        identifiant = payload.identifiant.strip().lower()
+        if not nom:
+            raise ValidationError("Le nom complet est obligatoire.")
+        if not identifiant:
+            raise ValidationError("L'identifiant est obligatoire.")
+        if payload.nouveau_mot_de_passe and len(payload.nouveau_mot_de_passe) < 5:
+            raise ValidationError(
+                "Le nouveau mot de passe doit contenir au moins 5 caracteres."
+            )
+        with self._session_factory() as session:
+            vendeur = self._obtenir_vendeur(session, vendeur_id)
+            existant = self._utilisateur_repository.chercher_par_email(
+                session, identifiant
+            )
+            if existant is not None and existant.id != vendeur.id:
+                raise UtilisateurExisteDejaError("Cet identifiant est deja utilise.")
+            vendeur.nom = nom
+            vendeur.email = identifiant
+            if payload.nouveau_mot_de_passe:
+                vendeur.mot_de_passe_hash = hasher_mot_de_passe(
+                    payload.nouveau_mot_de_passe
+                )
+            self._utilisateur_repository.mettre_a_jour(session, vendeur)
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_UTILISATEUR_MODIFIE,
+                utilisateur_id=utilisateur.utilisateur_id,
+                table_cible="utilisateurs",
+                element_id=vendeur.id,
+                details=f"Vendeur modifie: {vendeur.email}.",
             )
             session.commit()
 

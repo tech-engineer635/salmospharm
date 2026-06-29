@@ -2,7 +2,9 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QCheckBox
 
 from app.main import MainWindow
 from app.services.auth_service import SessionUtilisateur
@@ -22,7 +24,13 @@ def test_login_window_affiche_les_elements_principaux():
     assert window.identifiant_input.placeholderText() == "Entrez votre nom d'utilisateur"
     assert window.password_input.placeholderText() == "Entrez votre mot de passe"
     assert window.login_button.text().strip() == "Se connecter"
-    assert window.remember_checkbox.isChecked()
+    assert not any(
+        checkbox.text() == "Se souvenir de moi"
+        for checkbox in window.findChildren(QCheckBox)
+    )
+    assert window.login_button.isDefault()
+    assert window.identifiant_input.accessibleName()
+    assert window.password_input.accessibleName()
 
     window.close()
     app.processEvents()
@@ -59,11 +67,27 @@ def test_login_window_emet_session_apres_connexion_reussie():
     app.processEvents()
 
 
+def test_entree_depuis_mot_de_passe_valide_la_connexion():
+    app = QApplication.instance() or QApplication([])
+    window = LoginWindow(auth_service=_AuthServiceAvecConnexion())
+    sessions = []
+    window.connexion_reussie.connect(sessions.append)
+    window.identifiant_input.setText("gerant")
+    window.password_input.setText("abcde")
+    window.password_input.setFocus()
+
+    QTest.keyClick(window.password_input, Qt.Key.Key_Return)
+
+    assert len(sessions) == 1
+    window.close()
+    app.processEvents()
+
+
 def test_clic_se_connecter_ouvre_interface_selon_role():
     app = QApplication.instance() or QApplication([])
 
     for role, menu_attendu, menu_interdit in (
-        ("GERANT", "Parametres", "Nouvelle vente"),
+        ("GERANT", "Parametres", "Historique des ventes"),
         ("VENDEUR", "Nouvelle vente", "Parametres"),
     ):
         login = LoginWindow(auth_service=_AuthServiceAvecConnexion(role))

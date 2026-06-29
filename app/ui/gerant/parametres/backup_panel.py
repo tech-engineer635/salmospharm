@@ -68,7 +68,10 @@ class BackupPanel(QFrame):
         self.auto_checkbox.setObjectName("backupAutoCheckbox")
         self.auto_checkbox.setAccessibleName("Activer les sauvegardes automatiques")
         self.auto_checkbox.toggled.connect(self._actualiser_etat_frequence)
-        settings_form.addRow("Automatisation", self.auto_checkbox)
+        settings_form.addRow(
+            _field_label("Automatisation", self.auto_checkbox),
+            self.auto_checkbox,
+        )
 
         self.frequency_combo = QComboBox()
         self.frequency_combo.setObjectName("backupFrequencyCombo")
@@ -76,18 +79,27 @@ class BackupPanel(QFrame):
         self.frequency_combo.addItem("À la fermeture uniquement", "FERMETURE")
         self.frequency_combo.addItem("Manuelle uniquement", "MANUELLE")
         self.frequency_combo.setAccessibleName("Fréquence des sauvegardes automatiques")
-        settings_form.addRow("Fréquence", self.frequency_combo)
+        settings_form.addRow(
+            _field_label("Frequence", self.frequency_combo),
+            self.frequency_combo,
+        )
 
         self.last_backup_label = QLabel("Jamais effectuée")
         self.last_backup_label.setObjectName("backupMetaValue")
         self.last_backup_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        settings_form.addRow("Dernière sauvegarde", self.last_backup_label)
+        settings_form.addRow(
+            _field_label("Derniere sauvegarde", self.last_backup_label),
+            self.last_backup_label,
+        )
 
         self.folder_label = QLabel()
         self.folder_label.setObjectName("backupMetaValue")
         self.folder_label.setWordWrap(True)
         self.folder_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        settings_form.addRow("Dossier local", self.folder_label)
+        settings_form.addRow(
+            _field_label("Dossier local", self.folder_label),
+            self.folder_label,
+        )
         layout.addLayout(settings_form)
 
         self.save_settings_button = QPushButton("Enregistrer les réglages")
@@ -244,6 +256,13 @@ class BackupPanel(QFrame):
             "L'application va redemarrer pour appliquer les changements.",
         )
         self.restart_requested.emit()
+
+
+def _field_label(text: str, field: QWidget) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("settingsFieldLabel")
+    label.setBuddy(field)
+    return label
 
 
 def _format_size(size: int) -> str:

@@ -11,6 +11,7 @@ from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
+from app.services.auth_service import SessionUtilisateur
 from app.ui.components.icons import ui_icon
 
 
@@ -24,6 +25,7 @@ MENU_GERANT: tuple[NavigationItem, ...] = (
     NavigationItem("dashboard", "Tableau de bord"),
     NavigationItem("produits", "Produits"),
     NavigationItem("stock", "Stock"),
+    NavigationItem("nouvelle_vente", "Nouvelle vente"),
     NavigationItem("ventes", "Ventes"),
     NavigationItem("factures", "Factures"),
     NavigationItem("rapports", "Rapports"),
@@ -47,11 +49,12 @@ class Sidebar(QFrame):
 
     navigation_demandee = Signal(str)
     deconnexion_demandee = Signal()
-    profil_demande = Signal()
-
-    def __init__(self, role: str, parent: QWidget | None = None) -> None:
+    def __init__(self, session: SessionUtilisateur | str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.role = role
+        self.role = session.role if isinstance(session, SessionUtilisateur) else session
+        self.nom_utilisateur = session.nom if isinstance(session, SessionUtilisateur) else (
+            "Gerant" if session == ROLE_GERANT else "Vendeur"
+        )
         self._buttons: dict[str, QPushButton] = {}
         self.avatar_label: QLabel | None = None
         self.setObjectName("sidebar")
@@ -110,8 +113,6 @@ class Sidebar(QFrame):
     def _user_card(self) -> QFrame:
         card = QFrame()
         card.setObjectName("userCard")
-        card.setCursor(Qt.CursorShape.PointingHandCursor)
-        card.mousePressEvent = lambda event: self.profil_demande.emit()
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(18, 16, 18, 14)
         card_layout.setSpacing(12)
@@ -128,7 +129,7 @@ class Sidebar(QFrame):
         texts.setSpacing(3)
         role_label = QLabel("Gerant" if self.role == ROLE_GERANT else "Vendeur")
         role_label.setObjectName("userRoleTitle")
-        name_label = QLabel("Administrateur" if self.role == ROLE_GERANT else "Jean K.")
+        name_label = QLabel(self.nom_utilisateur)
         name_label.setObjectName("userName")
         texts.addWidget(role_label)
         texts.addWidget(name_label)
@@ -143,6 +144,7 @@ class Sidebar(QFrame):
         logout_button = QPushButton("Deconnexion")
         logout_button.setObjectName("logoutButton")
         logout_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        logout_button.setAccessibleName("Se deconnecter")
         logout_button.clicked.connect(self.deconnexion_demandee.emit)
         card_layout.addWidget(logout_button)
         return card

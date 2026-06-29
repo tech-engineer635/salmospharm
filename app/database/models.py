@@ -213,9 +213,11 @@ class Alerte(Base):
             name="ck_alertes_type",
         ),
         CheckConstraint("est_lue IN (0, 1)", name="ck_alertes_est_lue"),
+        CheckConstraint("est_active IN (0, 1)", name="ck_alertes_est_active"),
         Index("idx_alertes_produit", "produit_id"),
         Index("idx_alertes_lot", "lot_id"),
         Index("idx_alertes_est_lue", "est_lue"),
+        Index("idx_alertes_est_active", "est_active"),
         Index("idx_alertes_date", "cree_le"),
         Index("idx_alertes_type", "type_alerte"),
         {"sqlite_autoincrement": True},
@@ -231,6 +233,9 @@ class Alerte(Base):
     type_alerte: Mapped[str] = mapped_column(Text, nullable=False)
     message: Mapped[str | None] = mapped_column(Text)
     est_lue: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    est_active: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    derniere_detection_le: Mapped[str | None] = mapped_column(Text)
+    resolue_le: Mapped[str | None] = mapped_column(Text)
     cree_le: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
     produit: Mapped[Produit] = relationship(back_populates="alertes")

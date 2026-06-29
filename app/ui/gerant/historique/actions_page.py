@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from datetime import date
+
+from PySide6.QtCore import QDate, Qt
+from PySide6.QtWidgets import QCheckBox, QComboBox, QDateEdit, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.core.exceptions import SalmospharmError
 from app.services.auth_service import SessionUtilisateur
@@ -55,19 +57,27 @@ class HistoriqueActionsPage(QWidget):
         filters = QHBoxLayout(filter_panel)
         filters.setContentsMargins(18, 14, 18, 14)
         filters.setSpacing(14)
-        for label, value in (("Date", "Toutes les dates"), ("Utilisateur", "Tous les utilisateurs"), ("Type d'action", "Tous les types")):
-            box = QVBoxLayout()
-            title_label = QLabel(label)
-            title_label.setObjectName("reportMetricTitle")
-            value_label = QLabel(value)
-            value_label.setObjectName("filterPill")
-            box.addWidget(title_label)
-            box.addWidget(value_label)
-            filters.addLayout(box, 1)
+        self.date_enabled = QCheckBox("Filtrer par date")
+        self.date_input = QDateEdit(QDate.currentDate())
+        self.date_input.setCalendarPopup(True)
+        self.date_input.setEnabled(False)
+        self.date_enabled.toggled.connect(self.date_input.setEnabled)
+        self.date_enabled.toggled.connect(self._charger)
+        self.date_input.dateChanged.connect(self._charger)
+        self.user_combo = QComboBox()
+        self.user_combo.addItem("Tous les utilisateurs", "")
+        self.user_combo.currentIndexChanged.connect(self._charger)
+        self.action_combo = QComboBox()
+        self.action_combo.addItem("Tous les types", "")
+        self.action_combo.currentIndexChanged.connect(self._charger)
+        filters.addWidget(self.date_enabled)
+        filters.addWidget(self.date_input)
+        filters.addWidget(self.user_combo, 1)
+        filters.addWidget(self.action_combo, 1)
         reset = QPushButton("Reinitialiser")
         reset.setObjectName("outlineButton")
         reset.setIcon(ui_icon("refresh", "#0b3567", 16))
-        reset.clicked.connect(lambda: self.search_input.clear())
+        reset.clicked.connect(self._reset_filters)
         filters.addWidget(reset)
         layout.addWidget(filter_panel)
 
@@ -112,7 +122,22 @@ class HistoriqueActionsPage(QWidget):
 
     def _charger(self) -> None:
         try:
-            self._items = self._rapport_service.lister_actions(self.session_utilisateur, terme=self.search_input.text())
+            self._items = self._rapport_service.lister_actions(
+                self.session_utilisateur,
+                terme=self.search_input.text(),
+                date_action=(
+                    date(
+                        self.date_input.date().year(),
+                        self.date_input.date().month(),
+                        self.date_input.date().day(),
+                    )
+                    if self.date_enabled.isChecked()
+                    else None
+                ),
+                utilisateur_nom=str(self.user_combo.currentData() or ""),
+                action=str(self.action_combo.currentData() or ""),
+            )
+            self._sync_filter_options()
             self._remplir()
         except SalmospharmError as exc:
             QMessageBox.warning(self, "SALMOSPHARM", str(exc))
@@ -128,6 +153,31 @@ class HistoriqueActionsPage(QWidget):
                 table_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
                 self.table.setItem(row, column, table_item)
         self.total_actions_label.setText(str(len(self._items)))
+
+    def _sync_filter_options(self) -> None:
+        current_user = self.user_combo.currentData()
+        current_action = self.action_combo.currentData()
+        users = sorted({item.utilisateur_nom for item in self._items})
+        actions = sorted({item.action for item in self._items})
+        self.user_combo.blockSignals(True)
+        self.action_combo.blockSignals(True)
+        for value in users:
+            if self.user_combo.findData(value) < 0:
+                self.user_combo.addItem(value, value)
+        for value in actions:
+            if self.action_combo.findData(value) < 0:
+                self.action_combo.addItem(_label_action(value), value)
+        self.user_combo.setCurrentIndex(max(0, self.user_combo.findData(current_user)))
+        self.action_combo.setCurrentIndex(max(0, self.action_combo.findData(current_action)))
+        self.user_combo.blockSignals(False)
+        self.action_combo.blockSignals(False)
+
+    def _reset_filters(self) -> None:
+        self.search_input.clear()
+        self.date_enabled.setChecked(False)
+        self.user_combo.setCurrentIndex(0)
+        self.action_combo.setCurrentIndex(0)
+        self._charger()
 
 
 def _label_action(action: str) -> str:

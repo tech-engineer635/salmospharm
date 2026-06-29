@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,7 +20,12 @@ from PySide6.QtWidgets import (
 
 from app.core.exceptions import SalmospharmError
 from app.services.auth_service import SessionUtilisateur
-from app.services.utilisateur_service import UtilisateurService, VendeurDashboardData, VendeurPayload
+from app.services.utilisateur_service import (
+    ModificationVendeurPayload,
+    UtilisateurService,
+    VendeurDashboardData,
+    VendeurPayload,
+)
 from app.ui.components.icons import ui_icon
 
 
@@ -38,6 +44,7 @@ class VendeursPage(QWidget):
         self.session_utilisateur = session_utilisateur
         self._utilisateur_service = utilisateur_service or UtilisateurService()
         self._data: VendeurDashboardData | None = None
+        self._selected_vendor_id: int | None = None
         self._build_ui()
         if autoload:
             self.on_show()
@@ -66,6 +73,8 @@ class VendeursPage(QWidget):
         title.setObjectName("vendorsTitle")
         subtitle = QLabel("Gerez les comptes et les performances de votre equipe commerciale")
         subtitle.setObjectName("vendorsSubtitle")
+        subtitle.setWordWrap(True)
+        subtitle.setMaximumWidth(380)
         text.addWidget(title)
         text.addWidget(subtitle)
 
@@ -73,6 +82,7 @@ class VendeursPage(QWidget):
         self.search_input.setObjectName("vendorsSearch")
         self.search_input.setPlaceholderText("Rechercher un vendeur...")
         self.search_input.setClearButtonEnabled(True)
+        self.search_input.setMaximumWidth(260)
         self.search_input.addAction(ui_icon("search", "#506b92", 18), QLineEdit.ActionPosition.LeadingPosition)
         self.search_input.textChanged.connect(self._charger)
 
@@ -86,16 +96,32 @@ class VendeursPage(QWidget):
         header.addWidget(add_button)
         return header
 
-    def _build_metrics(self) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setSpacing(18)
+    def _build_metrics(self) -> QGridLayout:
+        self.metrics_grid = QGridLayout()
+        self.metrics_grid.setSpacing(18)
         self.total_metric = VendorMetricCard("Nombre de vendeurs", "0", "Total des comptes", "vendeurs", "green")
         self.active_metric = VendorMetricCard("Actifs aujourd'hui", "0", "Comptes actifs", "vendeurs", "blue")
         self.sales_metric = VendorMetricCard("Ventes du jour", "0 CDF", "CDF uniquement", "cart", "green")
         self.inactive_metric = VendorMetricCard("Comptes desactives", "0", "Comptes bloques", "vendeurs", "red")
-        for card in (self.total_metric, self.active_metric, self.sales_metric, self.inactive_metric):
-            row.addWidget(card, 1)
-        return row
+        self.metric_cards = (
+            self.total_metric,
+            self.active_metric,
+            self.sales_metric,
+            self.inactive_metric,
+        )
+        for index, card in enumerate(self.metric_cards):
+            self.metrics_grid.addWidget(card, 0, index)
+        return self.metrics_grid
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.set_compact(self.window().width() < 1200)
+
+    def set_compact(self, compact: bool) -> None:
+        for index, card in enumerate(self.metric_cards):
+            self.metrics_grid.addWidget(
+                card, index // 2 if compact else 0, index % 2 if compact else index
+            )
 
     def _build_table_panel(self) -> QFrame:
         panel = QFrame()
@@ -121,6 +147,7 @@ class VendeursPage(QWidget):
         self.vendors_table.verticalHeader().setVisible(False)
         self.vendors_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.vendors_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.vendors_table.itemSelectionChanged.connect(self._charger_selection)
         self.vendors_table.setMinimumHeight(430)
         layout.addWidget(self.vendors_table)
 
@@ -136,7 +163,7 @@ class VendeursPage(QWidget):
     def _build_form_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("vendorsPanel")
-        panel.setFixedWidth(354)
+        panel.setFixedWidth(320)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(14)
@@ -161,6 +188,9 @@ class VendeursPage(QWidget):
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
         for field in (self.name_input, self.identifier_input, self.password_input):
             field.setObjectName("vendorFormInput")
+        self.name_input.setAccessibleName("Nom complet du vendeur")
+        self.identifier_input.setAccessibleName("Identifiant du vendeur")
+        self.password_input.setAccessibleName("Mot de passe du vendeur")
 
         layout.addLayout(_field_group("Nom complet *", self.name_input))
         layout.addLayout(_field_group("Email ou identifiant *", self.identifier_input))
@@ -180,6 +210,8 @@ class VendeursPage(QWidget):
         self.save_button.setObjectName("primaryButton")
         self.save_button.setIcon(ui_icon("vendeurs", "#ffffff", 18))
         self.save_button.clicked.connect(self._creer_vendeur)
+        self.save_button.setDefault(True)
+        self.password_input.returnPressed.connect(self._creer_vendeur)
         buttons.addWidget(cancel)
         buttons.addWidget(self.save_button)
         layout.addLayout(buttons)
@@ -237,6 +269,20 @@ class VendeursPage(QWidget):
 
     def _creer_vendeur(self) -> None:
         try:
+            if self._selected_vendor_id is not None:
+                self._utilisateur_service.modifier_vendeur(
+                    self.session_utilisateur,
+                    vendeur_id=self._selected_vendor_id,
+                    payload=ModificationVendeurPayload(
+                        nom_complet=self.name_input.text(),
+                        identifiant=self.identifier_input.text(),
+                        nouveau_mot_de_passe=self.password_input.text(),
+                    ),
+                )
+                self._vider_formulaire()
+                self._charger()
+                self._afficher_info("Compte vendeur modifie.")
+                return
             result = self._utilisateur_service.creer_vendeur(
                 self.session_utilisateur,
                 VendeurPayload(
@@ -257,6 +303,15 @@ class VendeursPage(QWidget):
     def _toggle_vendeur(self, vendeur_id: int, actif: bool) -> None:
         try:
             if actif:
+                confirmation = QMessageBox.question(
+                    self,
+                    "Desactiver le vendeur",
+                    "Ce vendeur ne pourra plus se connecter. Continuer ?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if confirmation != QMessageBox.StandardButton.Yes:
+                    return
                 self._utilisateur_service.desactiver_vendeur(self.session_utilisateur, vendeur_id=vendeur_id)
             else:
                 self._utilisateur_service.reactiver_vendeur(self.session_utilisateur, vendeur_id=vendeur_id)
@@ -265,9 +320,39 @@ class VendeursPage(QWidget):
             self._afficher_erreur(str(exc))
 
     def _vider_formulaire(self) -> None:
+        self._selected_vendor_id = None
         self.name_input.clear()
         self.identifier_input.clear()
         self.password_input.clear()
+        self.password_input.setPlaceholderText("Entrez le mot de passe")
+        self.save_button.setText("Creer le compte")
+
+    def _charger_selection(self) -> None:
+        row = self.vendors_table.currentRow()
+        if row < 0 or self._data is None:
+            return
+        identifiant_item = self.vendors_table.item(row, 1)
+        if identifiant_item is None:
+            return
+        vendeur_id = identifiant_item.data(Qt.ItemDataRole.UserRole)
+        vendeur = next(
+            (
+                item
+                for item in self._data.vendeurs
+                if item.utilisateur_id == vendeur_id
+            ),
+            None,
+        )
+        if vendeur is None:
+            return
+        self._selected_vendor_id = vendeur.utilisateur_id
+        self.name_input.setText(vendeur.nom)
+        self.identifier_input.setText(vendeur.identifiant)
+        self.password_input.clear()
+        self.password_input.setPlaceholderText(
+            "Laisser vide pour conserver le mot de passe"
+        )
+        self.save_button.setText("Enregistrer")
 
     def _focus_form(self) -> None:
         if hasattr(self, "name_input"):
@@ -318,6 +403,7 @@ def _field_group(label_text: str, field: QWidget) -> QVBoxLayout:
     group.setSpacing(7)
     label = QLabel(label_text)
     label.setObjectName("vendorFormLabel")
+    label.setBuddy(field)
     group.addWidget(label)
     group.addWidget(field)
     return group

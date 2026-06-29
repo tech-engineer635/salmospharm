@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHeaderView,
     QHBoxLayout,
+    QGridLayout,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -126,25 +127,31 @@ class RapportsPage(QWidget):
         layout.addLayout(tabs)
         self._sync_tabs()
 
-        cards = QHBoxLayout()
-        cards.setSpacing(16)
+        self.metrics_grid = QGridLayout()
+        self.metrics_grid.setSpacing(16)
         self.day_card = MetricBox("Chiffre d'affaires (CDF)", "0", "+0% vs periode precedente", "report", "green")
         self.month_card = MetricBox("Transactions", "0", "+0% vs periode precedente", "cart", "blue")
         self.avg_card = MetricBox("Panier moyen (CDF)", "0", "+0% vs periode precedente", "calendar", "green")
         self.products_card = MetricBox("Produits vendus", "0", "+0% vs periode precedente", "stock", "blue")
-        for card in (self.day_card, self.month_card, self.avg_card, self.products_card):
-            cards.addWidget(card, 1)
-        layout.addLayout(cards)
+        self.metric_cards = (
+            self.day_card,
+            self.month_card,
+            self.avg_card,
+            self.products_card,
+        )
+        for index, card in enumerate(self.metric_cards):
+            self.metrics_grid.addWidget(card, 0, index)
+        layout.addLayout(self.metrics_grid)
 
-        charts = QHBoxLayout()
-        charts.setSpacing(16)
+        self.charts_grid = QGridLayout()
+        self.charts_grid.setSpacing(16)
         self.bar_chart = SalesBarChart()
         self.donut_chart = DonutChart()
         self.chart_panel, self.chart_title = _panel("Evolution des ventes (CDF)", self.bar_chart, "7 derniers jours")
         self.donut_panel, _ = _panel("Repartition des ventes par categorie", self.donut_chart)
-        charts.addWidget(self.chart_panel, 3)
-        charts.addWidget(self.donut_panel, 2)
-        layout.addLayout(charts, 1)
+        self.charts_grid.addWidget(self.chart_panel, 0, 0)
+        self.charts_grid.addWidget(self.donut_panel, 0, 1)
+        layout.addLayout(self.charts_grid, 1)
 
         self.vendor_table = _table(["Vendeur", "Transactions", "Ventes (CDF)", "Panier moyen (CDF)", "Produits vendus", "% du CA total", "Evolution"])
         self.vendor_panel, _ = _panel("Performance des vendeurs", self.vendor_table)
@@ -160,6 +167,18 @@ class RapportsPage(QWidget):
         self.empty_label.setAccessibleName("Aucune donnee de rapport")
         self.empty_label.hide()
         layout.addWidget(self.empty_label)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.set_compact(self.window().width() < 1200)
+
+    def set_compact(self, compact: bool) -> None:
+        for index, card in enumerate(self.metric_cards):
+            self.metrics_grid.addWidget(
+                card, index // 2 if compact else 0, index % 2 if compact else index
+            )
+        self.charts_grid.addWidget(self.chart_panel, 0, 0)
+        self.charts_grid.addWidget(self.donut_panel, 1 if compact else 0, 0 if compact else 1)
 
     def _render(self) -> None:
         if self._data is None:

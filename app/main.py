@@ -18,6 +18,7 @@ from app.core.paths import ensure_app_directories, get_logs_dir
 from app.database.init_db import init_database
 from app.services.auth_service import AuthService, SessionUtilisateur
 from app.services.backup_service import AutomaticBackupManager, BackupService
+from app.services.alert_coordinator import AlertCoordinator
 from app.ui.first_run.manager_account_window import FirstRunWindow
 from app.ui.layouts import MainWindow
 from app.ui.login import LoginWindow
@@ -70,8 +71,15 @@ def main() -> int:
 
         def show_main_window_after_login(utilisateur_connecte: SessionUtilisateur) -> None:
             automatic_backup_manager.enregistrer_utilisation()
-            main_window = MainWindow(session_utilisateur=utilisateur_connecte)
+            alert_coordinator = AlertCoordinator()
+            main_window = MainWindow(
+                session_utilisateur=utilisateur_connecte,
+                alert_coordinator=alert_coordinator,
+            )
             app.main_window = main_window
+            app.alert_coordinator = alert_coordinator
+            alert_coordinator.demarrer()
+            main_window.deconnexion_demandee.connect(alert_coordinator.arreter)
             main_window.deconnexion_demandee.connect(main_window.close)
             main_window.deconnexion_demandee.connect(show_login_window)
             main_window.redemarrage_demande.connect(restart_application)

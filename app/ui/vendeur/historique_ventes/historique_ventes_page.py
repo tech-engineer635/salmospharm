@@ -12,6 +12,7 @@ class HistoriqueVentesVendeurPage(HistoriqueVentesGerantPage):
 
     def _build_ui(self) -> None:
         super()._build_ui()
+        self.export_button.hide()
         for label in self.findChildren(QLabel):
             if label.objectName() == "reportsTitle":
                 label.setText("Historique des ventes")

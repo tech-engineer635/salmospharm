@@ -21,6 +21,7 @@ from app.repositories.stock_repository import StockRepository
 from app.repositories.utilisateur_repository import UtilisateurRepository
 from app.repositories.vente_repository import VenteRepository
 from app.services.alerte_service import AlerteService
+from app.services.alert_events import publier_evenement_alerte
 from app.services.auth_service import SessionUtilisateur
 from app.services.journal_service import JournalService
 
@@ -258,6 +259,8 @@ class VenteService:
                     details=f"Vente {numero_vente} validee pour {total} CDF.",
                 )
                 session.commit()
+                for produit_id in lignes_groupees:
+                    publier_evenement_alerte(produit_id)
                 return VenteResult(
                     vente_id=vente.id,
                     numero_vente=numero_vente,

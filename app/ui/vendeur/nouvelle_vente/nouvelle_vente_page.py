@@ -191,18 +191,6 @@ class NouvelleVentePage(QWidget):
         self.subtotal_label = _summary_value("0 CDF")
         layout.addLayout(_summary_row("Sous-total", self.subtotal_label))
 
-        self.discount_input = QLineEdit("0")
-        self.discount_input.setObjectName("saleAmountInput")
-        self.discount_input.setEnabled(False)
-        self.discount_input.setToolTip("Remise non activee en version 1.0 : total recalcule sans remise.")
-        discount_suffix = QLabel("CDF")
-        discount_suffix.setObjectName("summaryCurrency")
-        discount_row = QHBoxLayout()
-        discount_row.addWidget(_summary_label("Remise"))
-        discount_row.addWidget(self.discount_input)
-        discount_row.addWidget(discount_suffix)
-        layout.addLayout(discount_row)
-
         separator = QFrame()
         separator.setObjectName("summarySeparator")
         separator.setFixedHeight(1)
@@ -216,6 +204,7 @@ class NouvelleVentePage(QWidget):
         self.received_input.setObjectName("saleAmountInput")
         self.received_input.setRange(0, 999_999_999)
         self.received_input.setSuffix(" CDF")
+        self.received_input.setAccessibleName("Montant recu en CDF")
         self.received_input.valueChanged.connect(self._maj_resume)
         layout.addLayout(_field_group("Montant recu *", self.received_input))
         self.payment_hint_label = QLabel("Ajoutez un produit au panier pour encaisser.")
@@ -236,14 +225,10 @@ class NouvelleVentePage(QWidget):
         self.cash_button.setObjectName("primaryButton")
         self.cash_button.setIcon(ui_icon("money", "#ffffff", 18))
         self.cash_button.clicked.connect(self._encaisser)
+        self.cash_button.setDefault(True)
+        self.cash_button.setAccessibleName("Encaisser la vente definitive")
+        self.received_input.lineEdit().returnPressed.connect(self._encaisser)
         layout.addWidget(self.cash_button)
-
-        self.print_button = QPushButton("Imprimer facture")
-        self.print_button.setObjectName("outlineButton")
-        self.print_button.setIcon(ui_icon("ticket", "#0b3567", 18))
-        self.print_button.setEnabled(False)
-        self.print_button.setToolTip("L'impression sera branchee a la phase ticket/impression.")
-        layout.addWidget(self.print_button)
         layout.addStretch(1)
         return panel
 
@@ -385,6 +370,15 @@ class NouvelleVentePage(QWidget):
             self.received_input.setFocus()
             self._afficher_erreur("Le montant recu est insuffisant.")
             return
+        confirmation = QMessageBox.question(
+            self,
+            "Confirmer la vente",
+            "Cette vente sera definitive et ne pourra pas etre annulee. Continuer ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
         try:
             result = self._vente_service.valider_vente(
                 self.session_utilisateur,
@@ -402,7 +396,6 @@ class NouvelleVentePage(QWidget):
             self.received_input.setValue(0)
             self._charger_produits()
             self._remplir_panier()
-            self.print_button.setEnabled(True)
             self.ticket_genere.emit(ticket, impression_message)
         except SalmospharmError as exc:
             self._afficher_erreur(str(exc))
@@ -534,6 +527,7 @@ def _field_group(label_text: str, field: QWidget) -> QVBoxLayout:
     group = QVBoxLayout()
     group.setSpacing(6)
     label = _summary_label(label_text)
+    label.setBuddy(field)
     group.addWidget(label)
     group.addWidget(field)
     return group

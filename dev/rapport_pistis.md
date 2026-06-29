@@ -1058,3 +1058,41 @@ Controle visuel des quatre ecrans a 1450 x 900
 Build PyInstaller reussi
 Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
 ```
+
+## Stabilisation fonctionnelle et accessibilite - Phase 21
+
+- Suppression de `Se souvenir de moi`, des placeholders, de l'import catalogue
+  inactif, de la remise interdite et de la photo de profil non persistante.
+- Validation par Entree sur la connexion, le premier lancement et les formulaires
+  principaux, avec noms accessibles, focus visible et messages simples.
+- Recuperation de compte complete : code verifie, mot de passe remplace, ancien
+  code invalide et nouveau code affiche une seule fois.
+- Tableaux de bord gerant et vendeur relies aux ventes reelles avec periodes
+  Jour, 7 jours et 30 jours.
+- Nouvelle vente disponible pour le gerant, confirmation avant vente definitive,
+  historique vendeur sans export global et recherche vendeur en lecture seule.
+- Modification, desactivation et reactivation des vendeurs reliees au service.
+- Parametres pharmacie, imprimante, ticket 58/80 mm, impression automatique et
+  securite du compte ajoutes sans changement de theme.
+- Alertes migrees avec etat actif, derniere detection et resolution. Une file Qt
+  deduplique les changements, un worker utilise sa propre session SQLAlchemy et
+  une reconciliation complete s'execute toutes les 60 secondes.
+- Alertes persistantes reactivees au prochain lancement, resolues automatiquement
+  et recreees comme nouvelle occurrence en cas de recidive.
+- Navigation, filtres d'historique, compteur d'alertes et recherche globale
+  branches sur les pages reelles.
+- Mise en page verifiee sans depassement horizontal a 1450x900, 1366x768 et
+  1080x680; le defilement vertical reste disponible en hauteur reduite.
+- Contraste des champs verrouille par palette Qt pour eviter le texte ou les
+  placeholders invisibles selon le theme Windows, y compris a l'etat desactive.
+
+### Validation executee
+
+```txt
+113 tests pytest reussis
+Compilation de tous les modules app reussie
+python app/main.py lance avec succes dans un AppData temporaire
+Build PyInstaller reussi
+dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
+git diff --check sans erreur
+```

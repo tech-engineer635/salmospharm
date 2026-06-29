@@ -207,6 +207,7 @@ class StockPage(QWidget):
         title = QLabel("Entree de stock")
         title.setObjectName("sidePanelTitle")
         self.entry_product_combo = QComboBox()
+        self.entry_product_combo.setPlaceholderText("Aucun produit actif disponible")
         self.entry_lot_input = QLineEdit()
         self.entry_lot_input.setPlaceholderText("Ex : LOT-2026-A")
         self.entry_quantity_input = QSpinBox()
@@ -226,6 +227,8 @@ class StockPage(QWidget):
         self.entry_submit_button = QPushButton("Enregistrer l'entree")
         self.entry_submit_button.setObjectName("primaryButton")
         self.entry_submit_button.clicked.connect(self._enregistrer_entree)
+        self.entry_submit_button.setAccessibleName("Enregistrer l'entree de stock")
+        self.entry_motif_input.returnPressed.connect(self._enregistrer_entree)
         for field in (
             self.entry_product_combo,
             self.entry_lot_input,
@@ -268,6 +271,7 @@ class StockPage(QWidget):
         title = QLabel("Ajustement")
         title.setObjectName("sidePanelTitle")
         self.adjust_lot_combo = QComboBox()
+        self.adjust_lot_combo.setPlaceholderText("Aucun lot disponible")
         self.adjust_quantity_input = QSpinBox()
         self.adjust_quantity_input.setRange(0, 999_999)
         self.adjust_motif_input = QLineEdit()
@@ -275,6 +279,8 @@ class StockPage(QWidget):
         self.adjust_submit_button = QPushButton("Ajuster le lot")
         self.adjust_submit_button.setObjectName("blueButton")
         self.adjust_submit_button.clicked.connect(self._ajuster_lot)
+        self.adjust_submit_button.setAccessibleName("Confirmer l'ajustement du lot")
+        self.adjust_motif_input.returnPressed.connect(self._ajuster_lot)
         hint = QLabel("Le motif est obligatoire pour tracer l'ajustement.")
         hint.setObjectName("productStatusHint")
         hint.setWordWrap(True)
@@ -405,6 +411,15 @@ class StockPage(QWidget):
         if lot_id is None:
             self._afficher_erreur("Selectionnez un lot.")
             return
+        confirmation = QMessageBox.question(
+            self,
+            "Confirmer l'ajustement",
+            "L'ajustement modifiera le stock et sera journalise. Continuer ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
         try:
             self._stock_service.ajuster_stock(
                 self.session_utilisateur,
@@ -481,7 +496,10 @@ def _field_group(label_text: str, field: QWidget) -> QVBoxLayout:
     group = QVBoxLayout()
     group.setContentsMargins(0, 0, 0, 0)
     group.setSpacing(6)
-    group.addWidget(_field_label(label_text))
+    label = _field_label(label_text)
+    label.setBuddy(field)
+    field.setAccessibleName(label_text.replace(" *", ""))
+    group.addWidget(label)
     group.addWidget(field)
     return group
 

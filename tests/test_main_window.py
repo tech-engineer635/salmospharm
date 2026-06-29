@@ -90,7 +90,7 @@ def test_gerant_voit_uniquement_menus_gerant_demandes():
         "Deconnexion",
     ):
         assert label in labels
-    assert "Nouvelle vente" not in labels
+    assert "Nouvelle vente" in labels
     assert "Historique des ventes" not in labels
 
     window.close()
@@ -123,18 +123,21 @@ def test_topbar_et_sidebar_affichent_des_icones():
     app.processEvents()
 
 
-def test_dashboard_gerant_aujourdhui_et_voir_tout_ouvre_detail():
+def test_dashboard_gerant_periodes_et_liens_ouvrent_pages_reelles():
     app = _app()
     window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
 
     window.navigate("dashboard")
     dashboard = window._page_widgets["dashboard"]
-    buttons = [button for button in dashboard.findChildren(QPushButton) if button.text().strip() == "Voir tout"]
-
-    assert any(button.text().strip() == "Aujourd'hui   v" for button in window.findChildren(QPushButton))
-    assert buttons
-    buttons[0].click()
-    assert window.content_stack.currentIndex() == window._pages["details_top_produits"]
+    labels = {button.text().strip() for button in dashboard.findChildren(QPushButton)}
+    assert {"Jour", "7 jours", "30 jours"} <= labels
+    rapports = next(
+        button
+        for button in dashboard.findChildren(QPushButton)
+        if button.text().strip() == "Voir tout"
+    )
+    rapports.click()
+    assert window.content_stack.currentIndex() == window._pages["rapports"]
 
     window.close()
     app.processEvents()
@@ -344,33 +347,24 @@ def test_page_stock_ne_scrolle_pas_en_plein_ecran():
     app.processEvents()
 
 
-def test_bloc_utilisateur_ouvre_page_profil():
+def test_bloc_utilisateur_affiche_identite_reelle_sans_page_profil():
     app = _app()
     window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
 
-    window.toggle_sidebar()
-    window.sidebar.profil_demande.emit()
-
     labels = [label.text() for label in window.findChildren(QLabel)]
-    assert window.content_stack.currentIndex() == window._pages["profil"]
-    assert "Profil utilisateur" in labels
+    assert "Utilisateur Test" in labels
+    assert "profil" not in window._pages
 
     window.close()
     app.processEvents()
 
 
-def test_photo_profil_se_montre_dans_sidebar_sans_petite_fleche():
+def test_photo_profil_non_persistante_est_retiree():
     app = _app()
     window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
 
     assert not window.findChildren(QPushButton, "profileButton")
-    pixmap = QPixmap(80, 80)
-    pixmap.fill(QColor("#16a33a"))
-    window.sidebar.set_profile_photo(pixmap)
-
-    assert window.sidebar.avatar_label is not None
-    assert window.sidebar.avatar_label.pixmap() is not None
-    assert window.sidebar.avatar_label.pixmap().width() == 48
+    assert "Choisir une photo de profil" not in _button_texts(window)
 
     window.close()
     app.processEvents()
@@ -386,6 +380,18 @@ def test_parametres_ne_propose_plus_de_changement_de_theme():
     assert "Clair" not in radios
     assert "Sombre" not in radios
     assert window.findChild(BackupPanel) is not None
+    field_labels = {
+        label.text()
+        for label in window._page_widgets["parametres"].findChildren(QLabel)
+        if label.objectName() == "settingsFieldLabel"
+    }
+    assert {
+        "Nom de la pharmacie *",
+        "Telephone",
+        "Adresse",
+        "Mot de passe actuel",
+        "Automatisation",
+    } <= field_labels
 
     window.close()
     app.processEvents()

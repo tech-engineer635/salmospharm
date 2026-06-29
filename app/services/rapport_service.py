@@ -383,12 +383,26 @@ class RapportService:
             session.commit()
         return path
 
-    def lister_actions(self, utilisateur: SessionUtilisateur, *, terme: str = "", limit: int = 100) -> list[JournalActionItem]:
+    def lister_actions(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        terme: str = "",
+        limit: int = 100,
+        date_action: date | None = None,
+        utilisateur_nom: str = "",
+        action: str = "",
+    ) -> list[JournalActionItem]:
         """Retourne le journal systeme reserve au gerant."""
         exiger_permission(utilisateur.role, PERMISSION_CONSULTER_HISTORIQUE_SYSTEME)
         with self._session_factory() as session:
             rows = self._rapport_repository.lister_actions(
-                session, terme=terme, limit=limit
+                session,
+                terme=terme,
+                limit=limit,
+                date_action=date_action,
+                utilisateur_nom=utilisateur_nom,
+                action=action,
             )
         return [
             JournalActionItem(

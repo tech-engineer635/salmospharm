@@ -8,7 +8,9 @@ from typing import Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
 from app.core.exceptions import AuthentificationError, UtilisateurInactifError, ValidationError
 from app.services.auth_service import AuthService
 from app.ui.components.icons import ui_icon
+from app.ui.components.field_contrast import appliquer_contraste_champs
 
 
 class LoginWindow(QMainWindow):
@@ -44,6 +47,8 @@ class LoginWindow(QMainWindow):
 
         self._build_ui()
         self._apply_style()
+        appliquer_contraste_champs(self)
+        self.identifiant_input.setFocus()
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -205,14 +210,11 @@ class LoginWindow(QMainWindow):
         options = QHBoxLayout()
         options.setContentsMargins(0, 0, 0, 0)
         options.setSpacing(0)
-        self.remember_checkbox = QCheckBox("Se souvenir de moi")
-        self.remember_checkbox.setObjectName("rememberCheck")
-        self.remember_checkbox.setChecked(True)
-        options.addWidget(self.remember_checkbox)
         options.addStretch(1)
         forgot_button = QPushButton("Mot de passe oublie ?")
         forgot_button.setObjectName("linkButton")
-        forgot_button.clicked.connect(self._show_recovery_unavailable)
+        forgot_button.setAccessibleName("Recuperer le mot de passe")
+        forgot_button.clicked.connect(self._show_recovery_dialog)
         options.addWidget(forgot_button)
         layout.addLayout(options)
 
@@ -221,6 +223,10 @@ class LoginWindow(QMainWindow):
         self.login_button.setObjectName("loginButton")
         self.login_button.setIcon(ui_icon("lock", "#ffffff", 24))
         self.login_button.clicked.connect(self._submit)
+        self.login_button.setDefault(True)
+        self.login_button.setAutoDefault(True)
+        self.login_button.setAccessibleName("Se connecter")
+        self.password_input.returnPressed.connect(self._submit)
         layout.addWidget(self.login_button)
 
         layout.addSpacing(30)
@@ -249,6 +255,9 @@ class LoginWindow(QMainWindow):
         line_edit = QLineEdit()
         line_edit.setObjectName("authInput")
         line_edit.setPlaceholderText(placeholder)
+        line_edit.setAccessibleName(label_text)
+        line_edit.setAccessibleDescription(placeholder)
+        label.setBuddy(line_edit)
         line_edit.setFrame(False)
         if password:
             line_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -258,6 +267,7 @@ class LoginWindow(QMainWindow):
             toggle = QToolButton()
             toggle.setObjectName("passwordToggle")
             toggle.setIcon(ui_icon("eye", "#657282", 20))
+            toggle.setAccessibleName("Afficher ou masquer le mot de passe")
             toggle.clicked.connect(self._toggle_password_visibility)
             frame_layout.addWidget(toggle)
 
@@ -299,6 +309,7 @@ class LoginWindow(QMainWindow):
 
         if not identifiant or not mot_de_passe:
             QMessageBox.warning(self, "Validation", "Veuillez saisir votre identifiant et votre mot de passe.")
+            (self.identifiant_input if not identifiant else self.password_input).setFocus()
             return
 
         connecter = getattr(self._auth_service, "connecter", None)
@@ -314,6 +325,8 @@ class LoginWindow(QMainWindow):
             utilisateur_connecte = connecter(identifiant=identifiant, mot_de_passe=mot_de_passe)
         except (AuthentificationError, UtilisateurInactifError, ValidationError) as exc:
             QMessageBox.warning(self, "Connexion impossible", str(exc))
+            self.password_input.selectAll()
+            self.password_input.setFocus()
             return
         except Exception:
             QMessageBox.critical(
@@ -325,12 +338,12 @@ class LoginWindow(QMainWindow):
 
         self.connexion_reussie.emit(utilisateur_connecte)
 
-    def _show_recovery_unavailable(self) -> None:
-        QMessageBox.information(
-            self,
-            "Mot de passe oublie",
-            "La recuperation par code sera disponible dans une prochaine etape.",
-        )
+    def _show_recovery_dialog(self) -> None:
+        dialog = RecoveryDialog(self._auth_service, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.identifiant_input.setText(dialog.identifiant_input.text().strip())
+            self.password_input.clear()
+            self.password_input.setFocus()
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
@@ -487,6 +500,93 @@ class LoginWindow(QMainWindow):
             """
             .replace("__CHECK_ICON__", _asset_path("check.svg").as_posix())
         )
+
+
+class RecoveryDialog(QDialog):
+    """Collecte le code sans exposer la base ou les hashes a l'interface."""
+
+    def __init__(self, auth_service: AuthService, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._auth_service = auth_service
+        self.setWindowTitle("Recuperer le compte")
+        self.setMinimumWidth(480)
+
+        layout = QVBoxLayout(self)
+        title = QLabel("Reinitialiser le mot de passe")
+        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #0b356d;")
+        helper = QLabel(
+            "Saisissez l'identifiant, le code conserve et votre nouveau mot de passe."
+        )
+        helper.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(helper)
+
+        form = QFormLayout()
+        self.identifiant_input = QLineEdit()
+        self.code_input = QLineEdit()
+        self.password_input = QLineEdit()
+        self.confirm_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.confirm_input.setEchoMode(QLineEdit.EchoMode.Password)
+        fields = (
+            ("Identifiant", self.identifiant_input),
+            ("Code de recuperation", self.code_input),
+            ("Nouveau mot de passe", self.password_input),
+            ("Confirmation", self.confirm_input),
+        )
+        for label, field in fields:
+            field.setAccessibleName(label)
+            field.setMinimumHeight(42)
+            form.addRow(label, field)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Ok
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Reinitialiser")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setDefault(True)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self._submit)
+        self.confirm_input.returnPressed.connect(self._submit)
+        layout.addWidget(buttons)
+        appliquer_contraste_champs(self)
+        self.identifiant_input.setFocus()
+
+    def _submit(self) -> None:
+        try:
+            result = self._auth_service.reinitialiser_mot_de_passe(
+                identifiant=self.identifiant_input.text(),
+                code_recuperation=self.code_input.text(),
+                nouveau_mot_de_passe=self.password_input.text(),
+                confirmation_mot_de_passe=self.confirm_input.text(),
+            )
+        except (AuthentificationError, UtilisateurInactifError, ValidationError) as exc:
+            QMessageBox.warning(self, "Recuperation impossible", str(exc))
+            return
+        RecoveryCodeDialog(result.nouveau_code_recuperation, self).exec()
+        self.accept()
+
+
+class RecoveryCodeDialog(QDialog):
+    def __init__(self, code_recuperation: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Nouveau code de recuperation")
+        layout = QVBoxLayout(self)
+        message = QLabel(
+            "Conservez ce nouveau code. L'ancien code n'est plus utilisable."
+        )
+        message.setWordWrap(True)
+        code = QLineEdit(code_recuperation)
+        code.setReadOnly(True)
+        code.setAccessibleName("Nouveau code de recuperation")
+        button = QPushButton("J'ai conserve le code")
+        button.setDefault(True)
+        button.clicked.connect(self.accept)
+        layout.addWidget(message)
+        layout.addWidget(code)
+        layout.addWidget(button)
+        appliquer_contraste_champs(self)
 
 
 class BrandPanel(QFrame):

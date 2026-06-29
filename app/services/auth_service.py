@@ -13,6 +13,7 @@ from app.core.constants import (
     ACTION_COMPTE_GERANT_CREE,
     ACTION_CONNEXION_ECHOUEE,
     ACTION_CONNEXION_REUSSIE,
+    ACTION_MOT_DE_PASSE_REINITIALISE,
     ROLE_GERANT,
 )
 from app.core.exceptions import (
@@ -35,6 +36,12 @@ from app.services.recuperation_service import RecuperationService
 class CreationGerantResult:
     utilisateur_id: int
     code_recuperation: str
+
+
+@dataclass(frozen=True)
+class RecuperationCompteResult:
+    utilisateur_id: int
+    nouveau_code_recuperation: str
 
 
 @dataclass(frozen=True)
@@ -167,6 +174,131 @@ class AuthService:
                 utilisateur_id=utilisateur.id,
                 code_recuperation=code_recuperation.code,
             )
+
+    def reinitialiser_mot_de_passe(
+        self,
+        *,
+        identifiant: str,
+        code_recuperation: str,
+        nouveau_mot_de_passe: str,
+        confirmation_mot_de_passe: str,
+    ) -> RecuperationCompteResult:
+        """Reinitialise le compte et remplace le code utilise dans une transaction."""
+
+        identifiant_normalise = identifiant.strip().lower()
+        if not identifiant_normalise:
+            raise ValidationError("L'identifiant est obligatoire.")
+        if not code_recuperation.strip():
+            raise ValidationError("Le code de recuperation est obligatoire.")
+        if nouveau_mot_de_passe != confirmation_mot_de_passe:
+            raise ValidationError("La confirmation ne correspond pas au mot de passe.")
+        if len(nouveau_mot_de_passe) < 5:
+            raise ValidationError("Le mot de passe doit contenir au moins 5 caracteres.")
+
+        with self._session_factory() as session:
+            utilisateur = self._utilisateur_repository.chercher_par_email(
+                session, identifiant_normalise
+            )
+            if (
+                utilisateur is None
+                or not utilisateur.code_recuperation_hash
+                or not self._recuperation_service.verifier_code(
+                    code_recuperation.strip(), utilisateur.code_recuperation_hash
+                )
+            ):
+                raise AuthentificationError(
+                    "Identifiant ou code de recuperation incorrect."
+                )
+            if utilisateur.actif != 1:
+                raise UtilisateurInactifError(
+                    "Ce compte est desactive. Veuillez contacter le gerant."
+                )
+
+            nouveau_code = self._recuperation_service.generer_code_hash()
+            self._utilisateur_repository.mettre_a_jour_securite(
+                session,
+                utilisateur,
+                mot_de_passe_hash=hasher_mot_de_passe(nouveau_mot_de_passe),
+                code_recuperation_hash=nouveau_code.code_hash,
+            )
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_MOT_DE_PASSE_REINITIALISE,
+                utilisateur_id=utilisateur.id,
+                table_cible="utilisateurs",
+                element_id=utilisateur.id,
+                details="Mot de passe reinitialise avec le code de recuperation.",
+            )
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_CODE_RECUPERATION_GENERE,
+                utilisateur_id=utilisateur.id,
+                table_cible="utilisateurs",
+                element_id=utilisateur.id,
+                details="Nouveau code de recuperation genere apres reinitialisation.",
+            )
+            session.commit()
+            return RecuperationCompteResult(
+                utilisateur_id=utilisateur.id,
+                nouveau_code_recuperation=nouveau_code.code,
+            )
+
+    def changer_mot_de_passe(
+        self,
+        utilisateur_connecte: SessionUtilisateur,
+        *,
+        mot_de_passe_actuel: str,
+        nouveau_mot_de_passe: str,
+        confirmation: str,
+    ) -> None:
+        if nouveau_mot_de_passe != confirmation:
+            raise ValidationError("La confirmation ne correspond pas au mot de passe.")
+        if len(nouveau_mot_de_passe) < 5:
+            raise ValidationError("Le mot de passe doit contenir au moins 5 caracteres.")
+        with self._session_factory() as session:
+            utilisateur = self._utilisateur_repository.chercher_par_id(
+                session, utilisateur_connecte.utilisateur_id
+            )
+            if utilisateur is None or not verifier_mot_de_passe(
+                mot_de_passe_actuel, utilisateur.mot_de_passe_hash
+            ):
+                raise AuthentificationError("Le mot de passe actuel est incorrect.")
+            utilisateur.mot_de_passe_hash = hasher_mot_de_passe(nouveau_mot_de_passe)
+            self._utilisateur_repository.mettre_a_jour(session, utilisateur)
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_MOT_DE_PASSE_REINITIALISE,
+                utilisateur_id=utilisateur.id,
+                table_cible="utilisateurs",
+                element_id=utilisateur.id,
+                details="Mot de passe modifie depuis les parametres.",
+            )
+            session.commit()
+
+    def regenerer_code_recuperation(
+        self, utilisateur_connecte: SessionUtilisateur, *, mot_de_passe: str
+    ) -> str:
+        with self._session_factory() as session:
+            utilisateur = self._utilisateur_repository.chercher_par_id(
+                session, utilisateur_connecte.utilisateur_id
+            )
+            if utilisateur is None or not verifier_mot_de_passe(
+                mot_de_passe, utilisateur.mot_de_passe_hash
+            ):
+                raise AuthentificationError("Le mot de passe actuel est incorrect.")
+            code = self._recuperation_service.generer_code_hash()
+            utilisateur.code_recuperation_hash = code.code_hash
+            self._utilisateur_repository.mettre_a_jour(session, utilisateur)
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_CODE_RECUPERATION_GENERE,
+                utilisateur_id=utilisateur.id,
+                table_cible="utilisateurs",
+                element_id=utilisateur.id,
+                details="Code de recuperation regenere depuis les parametres.",
+            )
+            session.commit()
+            return code.code
 
     def _valider_creation_gerant(
         self,

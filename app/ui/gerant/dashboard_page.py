@@ -1,217 +1,203 @@
-"""Dashboard gerant placeholder visuel conforme a la maquette Phase 10."""
+"""Tableau de bord gerant alimente par les services metier."""
 
 from __future__ import annotations
 
-from typing import Iterable
+from datetime import date, timedelta
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
+from app.core.exceptions import SalmospharmError
+from app.services.alerte_service import AlerteService
+from app.services.auth_service import SessionUtilisateur
+from app.services.produit_service import ProduitService
+from app.services.rapport_service import RapportService
 from app.ui.components.charts import SalesLineChart
 from app.ui.components.icons import ui_icon
 
 
 class GerantDashboardPage(QWidget):
-    """Dashboard gerant en donnees fictives, sans requete ni logique metier."""
-
     voir_tout_demande = Signal(str)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        session_utilisateur: SessionUtilisateur,
+        rapport_service: RapportService | None = None,
+        produit_service: ProduitService | None = None,
+        alerte_service: AlerteService | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
+        self.session_utilisateur = session_utilisateur
+        self._rapport_service = rapport_service or RapportService()
+        self._produit_service = produit_service or ProduitService()
+        self._alerte_service = alerte_service or AlerteService()
+        self._jours = 1
         self.setObjectName("dashboardPage")
         self._build_ui()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(22)
+        layout.setSpacing(16)
+        periods = QHBoxLayout()
+        periods.addWidget(QLabel("Periode"))
+        group = QButtonGroup(self)
+        for label, days in (("Jour", 1), ("7 jours", 7), ("30 jours", 30)):
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setObjectName("smallButton")
+            button.setChecked(days == 1)
+            button.clicked.connect(lambda checked=False, value=days: self._set_period(value))
+            group.addButton(button)
+            periods.addWidget(button)
+        periods.addStretch(1)
+        layout.addLayout(periods)
 
         cards = QGridLayout()
-        cards.setHorizontalSpacing(16)
-        cards.addWidget(StatCard("Ventes du jour", "1 247 500 CDF", "+12,5% vs hier", "green", "cart"), 0, 0)
-        cards.addWidget(StatCard("Transactions", "86", "+8,4% vs hier", "blue", "transactions"), 0, 1)
-        cards.addWidget(StatCard("Produits en stock", "2 856", "0% vs hier", "green", "product"), 0, 2)
-        cards.addWidget(StatCard("Stock faible", "43", "+5 vs hier", "orange", "warning"), 0, 3)
-        cards.addWidget(StatCard("Expirations proches", "18", "+3 vs hier", "red", "calendar"), 0, 4)
+        self.sales_card = StatCard("Chiffre d'affaires", "0 CDF", "cart", "green")
+        self.transactions_card = StatCard("Transactions", "0", "transactions", "blue")
+        self.average_card = StatCard("Panier moyen", "0 CDF", "wallet", "green")
+        self.products_card = StatCard("Produits vendus", "0", "product", "blue")
+        self.alerts_card = StatCard("Alertes actives", "0", "warning", "orange")
+        for index, card in enumerate(
+            (
+                self.sales_card,
+                self.transactions_card,
+                self.average_card,
+                self.products_card,
+                self.alerts_card,
+            )
+        ):
+            cards.addWidget(card, index // 3, index % 3)
         layout.addLayout(cards)
 
-        middle = QHBoxLayout()
-        middle.setSpacing(18)
-        middle.addWidget(ChartPanel("Evolution des ventes (CDF)", "Aujourd'hui", ["18 mai", "19 mai", "20 mai", "21 mai", "22 mai", "23 mai", "24 mai"], [0.25, 0.42, 0.34, 0.66, 0.48, 0.82, 0.74]), 3)
-        products_panel = ProductsPanel("Top produits vendus", [("Paracetamol 500mg (CP)", "152", "91 200"), ("Amoxicilline 500mg (CP)", "98", "78 400"), ("Vitamine C 500mg (CP)", "76", "53 200"), ("Ibuprofene 400mg (CP)", "64", "44 800"), ("Omeprazole 20mg (CP)", "45", "31 500")])
-        products_panel.voir_tout_demande.connect(self.voir_tout_demande.emit)
-        middle.addWidget(products_panel, 2)
-        layout.addLayout(middle)
+        panels = QHBoxLayout()
+        chart_panel = QFrame()
+        chart_panel.setObjectName("contentPanel")
+        chart_layout = QVBoxLayout(chart_panel)
+        chart_layout.addWidget(QLabel("Evolution des ventes (CDF)"))
+        self.chart_host = QVBoxLayout()
+        chart_layout.addLayout(self.chart_host)
+        panels.addWidget(chart_panel, 3)
 
-        bottom = QHBoxLayout()
-        bottom.setSpacing(18)
-        vendor_panel = VendorSummaryPanel()
-        activity_panel = ActivityPanel()
-        alert_panel = AlertPanel()
-        vendor_panel.voir_tout_demande.connect(self.voir_tout_demande.emit)
-        activity_panel.voir_tout_demande.connect(self.voir_tout_demande.emit)
-        alert_panel.voir_tout_demande.connect(self.voir_tout_demande.emit)
-        bottom.addWidget(vendor_panel, 1)
-        bottom.addWidget(activity_panel, 1)
-        bottom.addWidget(alert_panel, 1)
-        layout.addLayout(bottom)
+        product_panel = QFrame()
+        product_panel.setObjectName("contentPanel")
+        product_layout = QVBoxLayout(product_panel)
+        header = QHBoxLayout()
+        header.addWidget(QLabel("Produits les plus vendus"))
+        header.addStretch(1)
+        view_products = QPushButton("Voir tout")
+        view_products.clicked.connect(lambda: self.voir_tout_demande.emit("rapports"))
+        header.addWidget(view_products)
+        product_layout.addLayout(header)
+        self.products_table = QTableWidget(0, 3)
+        self.products_table.setHorizontalHeaderLabels(["Produit", "Quantite", "CA (CDF)"])
+        self.products_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.products_table.verticalHeader().setVisible(False)
+        product_layout.addWidget(self.products_table)
+        panels.addWidget(product_panel, 2)
+        layout.addLayout(panels, 1)
+
+        links = QHBoxLayout()
+        for label, target in (
+            ("Vendeurs", "vendeurs"),
+            ("Historique des actions", "historique"),
+            ("Alertes", "alertes"),
+        ):
+            button = QPushButton(label)
+            button.setObjectName("outlineButton")
+            button.clicked.connect(
+                lambda checked=False, key=target: self.voir_tout_demande.emit(key)
+            )
+            links.addWidget(button)
+        layout.addLayout(links)
+
+    def _set_period(self, days: int) -> None:
+        self._jours = days
+        self.on_show()
+
+    def on_show(self) -> None:
+        fin = date.today()
+        debut = fin - timedelta(days=self._jours - 1)
+        try:
+            rapport = self._rapport_service.rapport_periode(
+                self.session_utilisateur,
+                date_debut=debut,
+                date_fin=fin,
+            )
+            alertes = self._alerte_service.lister_alertes(
+                self.session_utilisateur, non_lues_seulement=False
+            )
+        except Exception:
+            # Le point d'entree migre la base avant l'UI; ce repli garde les
+            # apercus et tests de widgets autonomes non bloquants.
+            return
+        self.sales_card.set_value(_cdf(rapport.total_jour))
+        self.transactions_card.set_value(str(rapport.ventes_jour))
+        self.average_card.set_value(_cdf(rapport.panier_moyen))
+        self.products_card.set_value(str(rapport.produits_vendus))
+        self.alerts_card.set_value(str(len(alertes)))
+        while self.chart_host.count():
+            item = self.chart_host.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        evolution = rapport.evolution or []
+        maximum = max(1, max((item.total for item in evolution), default=0))
+        self.chart_host.addWidget(
+            SalesLineChart(
+                [item.date_vente.strftime("%d/%m") for item in evolution],
+                [item.total / maximum for item in evolution],
+            )
+        )
+        self.products_table.setRowCount(len(rapport.produits[:5]))
+        for row, item in enumerate(rapport.produits[:5]):
+            for column, value in enumerate(
+                (item.produit_nom, str(item.quantite), _number(item.total))
+            ):
+                self.products_table.setItem(row, column, QTableWidgetItem(value))
 
 
 class StatCard(QFrame):
-    def __init__(self, title: str, value: str, trend: str, color: str, icon: str) -> None:
+    def __init__(self, title: str, value: str, icon: str, color: str) -> None:
         super().__init__()
         self.setObjectName("statCard")
-        self.setMinimumHeight(132)
+        self.setMinimumHeight(104)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 18)
-        layout.setSpacing(16)
         bubble = QLabel()
         bubble.setObjectName(f"iconBubble_{color}")
         bubble.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        bubble.setFixedSize(54, 54)
-        bubble.setPixmap(ui_icon(icon, "#ffffff", 28).pixmap(28, 28))
+        bubble.setFixedSize(48, 48)
+        bubble.setPixmap(ui_icon(icon, "#ffffff", 24).pixmap(24, 24))
         layout.addWidget(bubble)
         texts = QVBoxLayout()
-        texts.setSpacing(7)
         title_label = QLabel(title)
         title_label.setObjectName("statTitle")
-        value_label = QLabel(value)
-        value_label.setObjectName("statValue")
-        trend_label = QLabel(trend)
-        trend_label.setObjectName("statTrend")
+        self.value_label = QLabel(value)
+        self.value_label.setObjectName("statValue")
         texts.addWidget(title_label)
-        texts.addWidget(value_label)
-        texts.addWidget(trend_label)
+        texts.addWidget(self.value_label)
         layout.addLayout(texts, 1)
 
-
-class ChartPanel(QFrame):
-    def __init__(self, title: str, period: str, labels: list[str], values: list[float]) -> None:
-        super().__init__()
-        self.setObjectName("contentPanel")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
-        header = QHBoxLayout()
-        title_label = QLabel(title)
-        title_label.setObjectName("panelTitle")
-        period_button = QPushButton(period + "   v")
-        period_button.setObjectName("smallButton")
-        header.addWidget(title_label)
-        header.addStretch(1)
-        header.addWidget(period_button)
-        layout.addLayout(header)
-        layout.addWidget(SalesLineChart(labels, values), 1)
+    def set_value(self, value: str) -> None:
+        self.value_label.setText(value)
 
 
-class ProductsPanel(QFrame):
-    voir_tout_demande = Signal(str)
-
-    def __init__(self, title: str, rows: Iterable[tuple[str, str, str]]) -> None:
-        super().__init__()
-        self.setObjectName("contentPanel")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
-        header = QHBoxLayout()
-        title_label = QLabel(title)
-        title_label.setObjectName("panelTitle")
-        view_all = QPushButton("Voir tout")
-        view_all.setObjectName("smallButton")
-        view_all.clicked.connect(lambda: self.voir_tout_demande.emit("details_top_produits"))
-        header.addWidget(title_label)
-        header.addStretch(1)
-        header.addWidget(view_all)
-        layout.addLayout(header)
-        table = QGridLayout()
-        table.setHorizontalSpacing(12)
-        table.setVerticalSpacing(12)
-        for col, text in enumerate(("Produit", "Quantite", "CA (CDF)")):
-            label = QLabel(text)
-            label.setObjectName("tableHeader")
-            table.addWidget(label, 0, col)
-        for index, (product, qty, ca) in enumerate(rows, start=1):
-            table.addWidget(QLabel(f"{index}   {product}"), index, 0)
-            table.addWidget(QLabel(qty), index, 1)
-            table.addWidget(QLabel(ca), index, 2)
-        layout.addLayout(table)
+def _number(value: int) -> str:
+    return f"{value:,}".replace(",", " ")
 
 
-class VendorSummaryPanel(QFrame):
-    voir_tout_demande = Signal(str)
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setObjectName("contentPanel")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
-        header = QHBoxLayout()
-        title = QLabel("Synthese par vendeur")
-        title.setObjectName("panelTitle")
-        header.addWidget(title)
-        header.addStretch(1)
-        view_all = QPushButton("Voir tout")
-        view_all.setObjectName("smallButton")
-        view_all.clicked.connect(lambda: self.voir_tout_demande.emit("details_vendeurs"))
-        header.addWidget(view_all)
-        layout.addLayout(header)
-        for row in ("Jean K.        562 300        38        14 797", "Alice M.       358 900        25        14 356", "Paul B.        214 600        16        13 413", "Sophie L.      111 700         7        15 957"):
-            label = QLabel(row)
-            label.setObjectName("panelRow")
-            layout.addWidget(label)
-        total = QLabel("Total          1 247 500      86        14 506")
-        total.setObjectName("greenRow")
-        layout.addWidget(total)
-
-
-class ActivityPanel(QFrame):
-    voir_tout_demande = Signal(str)
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setObjectName("contentPanel")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
-        title = QLabel("Activites recentes")
-        title.setObjectName("panelTitle")
-        header = QHBoxLayout()
-        view_all = QPushButton("Voir tout")
-        view_all.setObjectName("smallButton")
-        view_all.clicked.connect(lambda: self.voir_tout_demande.emit("details_activites"))
-        header.addWidget(title)
-        header.addStretch(1)
-        header.addWidget(view_all)
-        layout.addLayout(header)
-        for row in ("Vente #VTE-00085 enregistree\n24 mai 2024 a 10:42", "Reception de stock - 32 produits\n24 mai 2024 a 09:15", "Facture #FAC-00045 creee\n24 mai 2024 a 08:47", "Produit Amoxicilline 500mg ajoute au stock\n24 mai 2024 a 08:20", "Alerte stock faible : Diclofenac 75mg\n24 mai 2024 a 07:58"):
-            label = QLabel(row)
-            label.setObjectName("activityRow")
-            layout.addWidget(label)
-
-
-class AlertPanel(QFrame):
-    voir_tout_demande = Signal(str)
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setObjectName("contentPanel")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
-        title = QLabel("Alertes rapides")
-        title.setObjectName("panelTitle")
-        header = QHBoxLayout()
-        view_all = QPushButton("Voir tout")
-        view_all.setObjectName("smallButton")
-        view_all.clicked.connect(lambda: self.voir_tout_demande.emit("details_alertes"))
-        header.addWidget(title)
-        header.addStretch(1)
-        header.addWidget(view_all)
-        layout.addLayout(header)
-        layout.addWidget(QLabel("Stock faible"))
-        for row in ("Diclofenac 75mg (CP)                         8", "Salbutamol sirop                              6", "Cotrimoxazole 480mg (CP)                      5"):
-            label = QLabel(row)
-            label.setObjectName("warningRow")
-            layout.addWidget(label)
-        layout.addSpacing(12)
-        layout.addWidget(QLabel("Expirations proches"))
-        for row in ("Amoxicilline 500mg (CP)              12/06/2024", "Metronidazole 250mg (CP)             18/06/2024", "Vitamine C 500mg (CP)                22/06/2024"):
-            label = QLabel(row)
-            label.setObjectName("dangerRow")
-            layout.addWidget(label)
+def _cdf(value: int) -> str:
+    return f"{_number(value)} CDF"

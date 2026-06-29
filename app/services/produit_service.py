@@ -31,6 +31,7 @@ from app.database.models import Categorie, Produit
 from app.repositories.categorie_repository import CategorieRepository
 from app.repositories.produit_repository import ProduitRepository
 from app.services.auth_service import SessionUtilisateur
+from app.services.alert_events import publier_evenement_alerte
 from app.services.journal_service import JournalService
 from app.utils.excel import convertir_datetime, creer_classeur_tableau, enregistrer_classeur
 
@@ -208,6 +209,7 @@ class ProduitService:
                 session.rollback()
                 raise ValidationError("Impossible de creer le produit.") from exc
 
+            publier_evenement_alerte(produit.id)
             return produit
 
     def modifier_produit(
@@ -250,6 +252,7 @@ class ProduitService:
                 session.rollback()
                 raise ValidationError("Impossible de modifier le produit.") from exc
 
+            publier_evenement_alerte(produit.id)
             return produit
 
     def desactiver_produit(self, utilisateur: SessionUtilisateur, *, produit_id: int) -> Produit:
@@ -270,6 +273,7 @@ class ProduitService:
                 details=f"Produit desactive: {produit.nom}.",
             )
             session.commit()
+            publier_evenement_alerte(produit.id)
             return produit
 
     def reactiver_produit(self, utilisateur: SessionUtilisateur, *, produit_id: int) -> Produit:
@@ -290,6 +294,7 @@ class ProduitService:
                 details=f"Produit reactive: {produit.nom}.",
             )
             session.commit()
+            publier_evenement_alerte(produit.id)
             return produit
 
     def _valider_payload(self, payload: ProduitPayload) -> ProduitPayload:

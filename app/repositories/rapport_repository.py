@@ -177,7 +177,16 @@ class RapportRepository:
             statement = statement.limit(limit)
         return session.execute(statement).all()
 
-    def lister_actions(self, session: Session, *, terme: str, limit: int):
+    def lister_actions(
+        self,
+        session: Session,
+        *,
+        terme: str,
+        limit: int,
+        date_action: date | None = None,
+        utilisateur_nom: str = "",
+        action: str = "",
+    ):
         statement = (
             select(
                 JournalActivite.id,
@@ -200,6 +209,17 @@ class RapportRepository:
                     JournalActivite.table_cible.ilike(motif),
                 )
             )
+        if date_action is not None:
+            statement = statement.where(
+                func.substr(JournalActivite.cree_le, 1, 10)
+                == date_action.isoformat()
+            )
+        if utilisateur_nom.strip():
+            statement = statement.where(
+                Utilisateur.nom == utilisateur_nom.strip()
+            )
+        if action.strip():
+            statement = statement.where(JournalActivite.action == action.strip())
         return session.execute(
             statement.order_by(JournalActivite.cree_le.desc(), JournalActivite.id.desc()).limit(limit)
         ).all()

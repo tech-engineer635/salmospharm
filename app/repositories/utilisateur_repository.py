@@ -60,3 +60,23 @@ class UtilisateurRepository:
         utilisateur.actif = 1
         session.flush()
         return utilisateur
+
+    def mettre_a_jour(self, session: Session, utilisateur: Utilisateur) -> Utilisateur:
+        utilisateur.modifie_le = func.current_timestamp()
+        session.flush()
+        return utilisateur
+
+    def mettre_a_jour_securite(
+        self,
+        session: Session,
+        utilisateur: Utilisateur,
+        *,
+        mot_de_passe_hash: str,
+        code_recuperation_hash: str,
+    ) -> Utilisateur:
+        utilisateur.mot_de_passe_hash = mot_de_passe_hash
+        utilisateur.code_recuperation_hash = code_recuperation_hash
+        utilisateur.doit_changer_mot_de_passe = 0
+        utilisateur.modifie_le = func.current_timestamp()
+        session.flush()
+        return utilisateur
