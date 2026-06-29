@@ -78,8 +78,8 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if hasattr(self, "sidebar") and self.width() < 1500:
-            self.sidebar.hide()
+        if hasattr(self, "sidebar"):
+            self.sidebar.setVisible(self.width() >= 1180)
         settings = getattr(self, "_page_widgets", {}).get("parametres")
         if settings is not None and hasattr(settings, "set_compact"):
             settings.set_compact(self.width() < 1200)
@@ -940,6 +940,161 @@ class MainWindow(QMainWindow):
                 color: #073264;
                 font-size: 19px;
                 font-weight: 900;
+            }
+            QFrame#invoiceMetricCard,
+            QFrame#invoiceListPanel,
+            QFrame#invoicePreviewPanel {
+                background-color: #ffffff;
+                border: 1px solid #e3e9ef;
+                border-radius: 10px;
+            }
+            QFrame#invoiceMetricCard {
+                min-height: 104px;
+            }
+            QLabel#invoiceMetricIcon {
+                border-radius: 20px;
+                min-height: 40px;
+                max-height: 40px;
+                min-width: 40px;
+                max-width: 40px;
+            }
+            QLabel#invoiceMetricTitle {
+                color: #526b8b;
+                font-size: 11px;
+            }
+            QLabel#invoiceMetricValue {
+                color: #082c59;
+                font-size: 19px;
+                font-weight: 900;
+            }
+            QLabel#invoiceMetricTrend {
+                color: #15933a;
+                font-size: 10px;
+                font-weight: 700;
+            }
+            QLineEdit#invoiceListSearch {
+                min-height: 38px;
+            }
+            QPushButton#invoiceFilterButton,
+            QPushButton#invoiceMoreButton {
+                background-color: #ffffff;
+                border: 1px solid #dce5ed;
+                border-radius: 6px;
+                color: #173b68;
+                min-height: 38px;
+                padding: 0 14px;
+            }
+            QPushButton#invoiceMoreButton {
+                font-size: 20px;
+                min-width: 34px;
+                max-width: 34px;
+                padding: 0;
+            }
+            QTableWidget#invoiceListTable,
+            QTableWidget#invoiceLinesTable {
+                background-color: #ffffff;
+                border: none;
+                color: #15375f;
+                font-size: 11px;
+                gridline-color: #e7edf2;
+                selection-background-color: #eef9f0;
+                selection-color: #087c2e;
+            }
+            QTableWidget#invoiceListTable QHeaderView::section,
+            QTableWidget#invoiceLinesTable QHeaderView::section {
+                background-color: #f7f9fb;
+                border: none;
+                border-bottom: 1px solid #dfe7ee;
+                color: #405b7f;
+                font-size: 10px;
+                font-weight: 700;
+                min-height: 34px;
+                padding: 0 8px;
+            }
+            QLabel#invoiceFooter {
+                color: #73849b;
+                font-size: 10px;
+            }
+            QPushButton#invoicePageButton,
+            QPushButton#invoicePageActive {
+                background-color: #ffffff;
+                border: 1px solid #dce5ed;
+                border-radius: 5px;
+                color: #173b68;
+                min-height: 27px;
+                min-width: 27px;
+                max-width: 27px;
+                padding: 0;
+            }
+            QPushButton#invoicePageActive {
+                background-color: #15933a;
+                border-color: #15933a;
+                color: #ffffff;
+            }
+            QLabel#invoicePreviewTitle {
+                color: #082c59;
+                font-size: 17px;
+                font-weight: 900;
+            }
+            QLabel#invoiceStatusBadge {
+                background-color: #eaf8ee;
+                border-radius: 6px;
+                color: #138736;
+                font-size: 10px;
+                font-weight: 700;
+                padding: 4px 8px;
+            }
+            QLabel#invoiceWord {
+                color: #15933a;
+                font-size: 20px;
+                font-weight: 900;
+            }
+            QFrame#invoiceParties {
+                background-color: #ffffff;
+                border: 1px solid #dfe7ee;
+                border-radius: 7px;
+            }
+            QLabel#invoicePartyIcon {
+                background-color: #f7f9fb;
+                border: 1px solid #dfe7ee;
+                border-radius: 15px;
+                min-height: 30px;
+                max-height: 30px;
+                min-width: 30px;
+                max-width: 30px;
+            }
+            QLabel#invoiceGrandTotal {
+                color: #129039;
+                font-size: 14px;
+                font-weight: 900;
+            }
+            QLabel#invoiceTotalLabel,
+            QLabel#invoiceTotalValue {
+                color: #526b8b;
+                font-size: 11px;
+            }
+            QPushButton#invoicePrintButton,
+            QPushButton#invoiceDownloadButton {
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 800;
+                min-height: 46px;
+            }
+            QPushButton#invoicePrintButton {
+                background-color: #ffffff;
+                border: 1px solid #1254a0;
+                color: #1254a0;
+            }
+            QPushButton#invoiceDownloadButton {
+                background-color: #087a3b;
+                border: none;
+                color: #ffffff;
+            }
+            QPushButton#invoicePrintButton:disabled,
+            QPushButton#invoiceDownloadButton:disabled {
+                background-color: #edf1f4;
+                border-color: #cfd8e1;
+                color: #7b8998;
             }
             QWidget#reportsPage,
             QWidget#historyPage,

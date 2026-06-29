@@ -1,19 +1,24 @@
-"""Composant d'apercu facture/recu genere depuis une vente."""
+"""Ecran Factures : historique des ventes et apercu du ticket selectionne."""
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -21,12 +26,13 @@ from PySide6.QtWidgets import (
 from app.core.exceptions import ImprimanteIndisponibleError, SalmospharmError
 from app.services.auth_service import SessionUtilisateur
 from app.services.impression_service import ImpressionService
+from app.services.rapport_service import RapportService, VenteHistoriqueItem
 from app.services.ticket_service import TicketDocument, TicketService
 from app.ui.components.icons import ui_icon
 
 
 class TicketPreviewPage(QWidget):
-    """Page Facture/Recu sans table facture persistante."""
+    """Consulte les factures derivees des ventes, sans table facture."""
 
     retour_demande = Signal()
 
@@ -35,6 +41,8 @@ class TicketPreviewPage(QWidget):
         session_utilisateur: SessionUtilisateur,
         ticket_service: TicketService | None = None,
         impression_service: ImpressionService | None = None,
+        rapport_service: RapportService | None = None,
+        autoload: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -42,217 +50,251 @@ class TicketPreviewPage(QWidget):
         self.session_utilisateur = session_utilisateur
         self._ticket_service = ticket_service or TicketService()
         self._impression_service = impression_service or ImpressionService()
+        self._rapport_service = rapport_service or RapportService()
         self._ticket: TicketDocument | None = None
+        self._ventes: list[VenteHistoriqueItem] = []
         self._build_ui()
         self._set_empty_state()
+        if autoload:
+            self.on_show()
+
+    def on_show(self) -> None:
+        self._charger_factures()
 
     def set_ticket(self, ticket: TicketDocument, message: str | None = None) -> None:
         self._ticket = ticket
         self._render_ticket(ticket)
-        if message:
-            self.notice_label.setText(message)
-            self.notice_label.show()
-        else:
-            self.notice_label.hide()
+        self.notice_label.setText(message or "")
+        self.notice_label.setVisible(bool(message))
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(14)
-
-        header = QVBoxLayout()
-        header.setSpacing(6)
-        title = QLabel("Facture / Recu")
-        title.setObjectName("ticketPageTitle")
-        breadcrumb = QLabel("Accueil > Factures > Facture / Recu")
-        breadcrumb.setObjectName("ticketBreadcrumb")
-        header.addWidget(title)
-        header.addWidget(breadcrumb)
-        layout.addLayout(header)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(18)
 
         self.notice_label = QLabel()
         self.notice_label.setObjectName("ticketNotice")
-        self.notice_label.setWordWrap(True)
-        layout.addWidget(self.notice_label)
+        root.addWidget(self.notice_label)
 
-        self.card = QFrame()
-        self.card.setObjectName("ticketCard")
-        card_layout = QVBoxLayout(self.card)
-        card_layout.setContentsMargins(18, 18, 18, 18)
-        card_layout.setSpacing(16)
+        metrics = QHBoxLayout()
+        metrics.setSpacing(16)
+        self.count_metric = _MetricCard("receipt", "#16a33a", "Factures du jour", "0", "↗ activité du jour")
+        self.total_metric = _MetricCard("money", "#2469c8", "Montant total encaissé", "0 CDF", "↗ ventes validées")
+        self.printed_metric = _MetricCard("print", "#16a33a", "Factures disponibles", "0", "Tickets générables")
+        self.pending_metric = _MetricCard("history", "#ff810a", "En attente", "0", "Impression non bloquante")
+        for card in (self.count_metric, self.total_metric, self.printed_metric, self.pending_metric):
+            metrics.addWidget(card, 1)
+        root.addLayout(metrics)
 
+        content = QHBoxLayout()
+        content.setSpacing(20)
+        content.addWidget(self._build_list_panel(), 49)
+        content.addWidget(self._build_preview_panel(), 51)
+        root.addLayout(content, 1)
+
+    def _build_list_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("invoiceListPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(18, 14, 18, 14)
+        self.search_input = QLineEdit()
+        self.search_input.setObjectName("invoiceListSearch")
+        self.search_input.setPlaceholderText("Rechercher une facture...")
+        self.search_input.addAction(ui_icon("search", "#173b68", 17), QLineEdit.ActionPosition.TrailingPosition)
+        self.search_input.textChanged.connect(self._charger_factures)
+        filter_button = QPushButton("Filtres")
+        filter_button.setObjectName("invoiceFilterButton")
+        filter_button.setIcon(ui_icon("filter", "#173b68", 16))
+        toolbar.addWidget(self.search_input, 1)
+        toolbar.addWidget(filter_button)
+        layout.addLayout(toolbar)
+
+        self.table = QTableWidget(0, 5)
+        self.table.setObjectName("invoiceListTable")
+        self.table.setHorizontalHeaderLabels(["N° Facture", "Date", "Vendeur", "Montant (CDF)", "Statut"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.itemSelectionChanged.connect(self._ouvrir_selection)
+        layout.addWidget(self.table, 1)
+
+        footer = QHBoxLayout()
+        footer.setContentsMargins(18, 10, 18, 12)
+        self.footer_label = QLabel("Affichage de 0 facture")
+        self.footer_label.setObjectName("invoiceFooter")
+        footer.addWidget(self.footer_label)
+        footer.addStretch(1)
+        for label in ("‹", "1", "2", "3", "…", "›"):
+            button = QPushButton(label)
+            button.setObjectName("invoicePageActive" if label == "1" else "invoicePageButton")
+            footer.addWidget(button)
+        layout.addLayout(footer)
+        return panel
+
+    def _build_preview_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("invoicePreviewPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(14)
         top = QHBoxLayout()
-        top.setSpacing(22)
-        self.logo = QLabel()
-        self.logo.setObjectName("ticketLogo")
-        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.logo.setFixedSize(210, 150)
-        top.addWidget(self.logo)
+        title = QLabel("Aperçu de la facture")
+        title.setObjectName("invoicePreviewTitle")
+        self.status_badge = QLabel("●  Imprimée")
+        self.status_badge.setObjectName("invoiceStatusBadge")
+        more = QPushButton("⋮")
+        more.setObjectName("invoiceMoreButton")
+        top.addWidget(title)
+        top.addWidget(self.status_badge)
+        top.addStretch(1)
+        top.addWidget(more)
+        layout.addLayout(top)
 
-        details = QVBoxLayout()
-        details.setSpacing(6)
-        self.pharmacy_label = QLabel()
-        self.pharmacy_label.setObjectName("ticketPharmacy")
-        self.address_label = QLabel()
-        self.address_label.setObjectName("ticketMeta")
-        self.phone_label = QLabel()
-        self.phone_label.setObjectName("ticketMeta")
-        details.addWidget(self.pharmacy_label)
-        details.addWidget(self.address_label)
-        details.addWidget(self.phone_label)
-        details.addStretch(1)
-        top.addLayout(details, 1)
-
-        invoice_box = QFrame()
-        invoice_box.setObjectName("invoiceBox")
-        invoice_layout = QVBoxLayout(invoice_box)
-        invoice_layout.setContentsMargins(18, 12, 18, 12)
-        invoice_layout.setSpacing(8)
-        invoice_title = QLabel("FACTURE / RECU")
-        invoice_title.setObjectName("invoiceTitle")
-        invoice_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.number_label = QLabel()
-        self.number_label.setObjectName("invoiceNumber")
-        self.number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.barcode_label = QLabel()
-        self.barcode_label.setObjectName("ticketBarcode")
-        self.barcode_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.date_label = QLabel()
+        invoice_head = QHBoxLayout()
+        left = QVBoxLayout()
+        self.invoice_word = QLabel("FACTURE")
+        self.invoice_word.setObjectName("invoiceWord")
+        self.date_label = QLabel("")
         self.date_label.setObjectName("ticketMeta")
-        self.date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        invoice_layout.addWidget(invoice_title)
-        invoice_layout.addWidget(self.number_label)
-        invoice_layout.addWidget(self.barcode_label)
-        invoice_layout.addWidget(self.date_label)
-        top.addWidget(invoice_box)
-        card_layout.addLayout(top)
+        left.addWidget(self.invoice_word)
+        left.addWidget(self.date_label)
+        self.number_label = QLabel("N° —")
+        self.number_label.setObjectName("invoiceNumber")
+        invoice_head.addLayout(left)
+        invoice_head.addStretch(1)
+        invoice_head.addWidget(self.number_label, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(invoice_head)
 
-        parties = QHBoxLayout()
-        parties.setSpacing(22)
-        self.client_box = _party_box("Client")
-        self.vendor_box = _party_box("Vendeur")
-        parties.addWidget(self.client_box, 1)
-        parties.addWidget(self.vendor_box, 1)
-        card_layout.addLayout(parties)
+        parties = QFrame()
+        parties.setObjectName("invoiceParties")
+        parties_layout = QHBoxLayout(parties)
+        parties_layout.setContentsMargins(16, 12, 16, 12)
+        self.vendor_box = _PartyBox("Vendeur", "user")
+        self.client_box = _PartyBox("Client", "users")
+        parties_layout.addWidget(self.vendor_box, 1)
+        parties_layout.addWidget(self.client_box, 1)
+        layout.addWidget(parties)
 
-        self.lines_layout = QVBoxLayout()
-        self.lines_layout.setSpacing(0)
-        card_layout.addLayout(self.lines_layout)
+        self.lines_table = QTableWidget(0, 4)
+        self.lines_table.setObjectName("invoiceLinesTable")
+        self.lines_table.setHorizontalHeaderLabels(["Article", "Qté", "Prix unitaire", "Total (CDF)"])
+        self.lines_table.verticalHeader().setVisible(False)
+        self.lines_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.lines_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in (1, 2, 3):
+            self.lines_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.lines_table, 1)
 
-        totals = QHBoxLayout()
-        totals.addStretch(1)
-        totals_card = QFrame()
-        totals_card.setObjectName("ticketTotals")
-        totals_layout = QVBoxLayout(totals_card)
-        totals_layout.setContentsMargins(16, 10, 16, 10)
-        totals_layout.setSpacing(8)
-        self.subtotal_label = QLabel()
-        self.received_label = QLabel()
-        self.change_label = QLabel()
-        self.total_label = QLabel()
-        totals_layout.addLayout(_total_row("Sous-total", self.subtotal_label))
-        totals_layout.addLayout(_total_row("Recu", self.received_label))
-        totals_layout.addLayout(_total_row("Monnaie", self.change_label))
-        totals_layout.addLayout(_total_row("TOTAL A PAYER", self.total_label, strong=True))
-        totals.addWidget(totals_card, 0)
-        card_layout.addLayout(totals)
+        totals = QGridLayout()
+        self.subtotal_label = QLabel("0")
+        self.received_label = QLabel("0")
+        self.change_label = QLabel("0")
+        self.total_label = QLabel("0 CDF")
+        rows = (("Sous-total", self.subtotal_label), ("Montant reçu", self.received_label), ("Monnaie rendue", self.change_label), ("Total à payer", self.total_label))
+        for row, (text, value) in enumerate(rows):
+            name = QLabel(text)
+            name.setObjectName("invoiceGrandTotal" if row == 3 else "invoiceTotalLabel")
+            value.setObjectName("invoiceGrandTotal" if row == 3 else "invoiceTotalValue")
+            totals.addWidget(name, row, 1)
+            totals.addWidget(value, row, 2, Qt.AlignmentFlag.AlignRight)
+        totals.setColumnStretch(0, 1)
+        layout.addLayout(totals)
 
         actions = QHBoxLayout()
-        actions.setSpacing(28)
+        actions.setSpacing(18)
         self.print_button = QPushButton("Imprimer")
-        self.print_button.setObjectName("outlineButton")
-        self.print_button.setIcon(ui_icon("print", "#0b3567", 18))
+        self.print_button.setObjectName("invoicePrintButton")
+        self.print_button.setIcon(ui_icon("print", "#1254a0", 18))
         self.print_button.clicked.connect(self._imprimer)
-        self.pdf_button = QPushButton("Telecharger (PDF)")
-        self.pdf_button.setObjectName("outlineButton")
-        self.pdf_button.setIcon(ui_icon("download", "#0b3567", 18))
+        self.pdf_button = QPushButton("Télécharger")
+        self.pdf_button.setObjectName("invoiceDownloadButton")
+        self.pdf_button.setIcon(ui_icon("download", "#ffffff", 18))
         self.pdf_button.clicked.connect(self._exporter_pdf)
-        self.close_button = QPushButton("Fermer")
-        self.close_button.setObjectName("successButton")
-        self.close_button.setIcon(ui_icon("close", "#0a7f31", 18))
-        self.close_button.clicked.connect(self.retour_demande.emit)
-        actions.addWidget(self.print_button)
-        actions.addWidget(self.pdf_button)
-        actions.addWidget(self.close_button)
-        card_layout.addLayout(actions)
+        actions.addWidget(self.print_button, 1)
+        actions.addWidget(self.pdf_button, 1)
+        layout.addLayout(actions)
+        return panel
 
-        layout.addWidget(self.card, 1)
+    def _charger_factures(self) -> None:
+        terme = self.search_input.text() if hasattr(self, "search_input") else ""
+        try:
+            self._ventes = self._rapport_service.lister_ventes(
+                self.session_utilisateur, terme=terme, limit=100
+            )
+        except SalmospharmError as exc:
+            QMessageBox.warning(self, "SALMOSPHARM", str(exc))
+            return
+        self.table.setRowCount(0)
+        total = 0
+        for vente in self._ventes:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            total += vente.total
+            values = (vente.numero_vente, vente.date_vente, vente.vendeur_nom, _format_number(vente.total), "Imprimée")
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.ItemDataRole.UserRole, vente.vente_id)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | (Qt.AlignmentFlag.AlignRight if column == 3 else Qt.AlignmentFlag.AlignLeft))
+                self.table.setItem(row, column, item)
+            self.table.setRowHeight(row, 44)
+        self.footer_label.setText(f"Affichage de 1 à {len(self._ventes)} sur {len(self._ventes)} factures" if self._ventes else "Aucune facture")
+        today_count = sum(1 for item in self._ventes if item.date_vente.startswith(date.today().strftime("%d/%m/%Y")))
+        self.count_metric.set_value(str(today_count))
+        self.total_metric.set_value(f"{_format_number(total)} CDF")
+        self.printed_metric.set_value(str(len(self._ventes)))
+        self.pending_metric.set_value("0")
+        if self._ventes and self._ticket is None:
+            self.table.selectRow(0)
+
+    def _ouvrir_selection(self) -> None:
+        row = self.table.currentRow()
+        if row < 0:
+            return
+        vente_id = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        try:
+            self.set_ticket(self._ticket_service.generer_ticket(self.session_utilisateur, vente_id))
+        except SalmospharmError as exc:
+            QMessageBox.warning(self, "SALMOSPHARM", str(exc))
 
     def _set_empty_state(self) -> None:
-        self.notice_label.setText("Aucun ticket selectionne. Validez une vente pour afficher le recu.")
-        self.notice_label.show()
-        self.pharmacy_label.setText("SALMOSPHARM 133")
-        self.address_label.setText("")
-        self.phone_label.setText("")
-        self.number_label.setText("En attente")
-        self.barcode_label.setText("|||| |||| |||| ||||")
-        self.date_label.setText("")
-        self.logo.setText("SALMOSPHARM")
+        self.notice_label.hide()
+        self.number_label.setText("N° —")
+        self.date_label.setText("Sélectionnez une facture dans la liste.")
+        self.vendor_box.value_label.setText("—")
+        self.client_box.value_label.setText("Client comptoir")
+        self.lines_table.setRowCount(0)
         for button in (self.print_button, self.pdf_button):
             button.setEnabled(False)
-        self._clear_lines()
 
     def _render_ticket(self, ticket: TicketDocument) -> None:
-        logo_path = Path(__file__).resolve().parents[2] / "assets" / "logo.png"
-        pixmap = QPixmap(str(logo_path))
-        if pixmap.isNull():
-            self.logo.setText("SALMOSPHARM")
-        else:
-            self.logo.setPixmap(pixmap.scaled(190, 140, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        self.pharmacy_label.setText(ticket.nom_pharmacie)
-        self.address_label.setText(ticket.adresse or "Adresse non configuree")
-        self.phone_label.setText(ticket.telephone or "Telephone non configure")
-        self.number_label.setText(ticket.numero_vente)
-        self.barcode_label.setText(_fake_barcode(ticket.numero_vente))
+        self.number_label.setText(f"N° {ticket.numero_vente}")
         self.date_label.setText(f"Date : {ticket.date_vente}")
-        self.client_box.value_label.setText(ticket.numero_vente)
         self.vendor_box.value_label.setText(ticket.vendeur_nom)
         self.vendor_box.sub_label.setText("Poste de vente")
-        self._render_lines(ticket)
-        self.subtotal_label.setText(_format_cdf(ticket.total))
-        self.received_label.setText(_format_cdf(ticket.montant_recu))
-        self.change_label.setText(_format_cdf(ticket.monnaie_rendue))
+        self.client_box.value_label.setText("Client comptoir")
+        self.client_box.sub_label.setText(ticket.telephone or "")
+        self.lines_table.setRowCount(0)
+        for line in ticket.lignes:
+            row = self.lines_table.rowCount()
+            self.lines_table.insertRow(row)
+            for column, value in enumerate((line.produit_nom, str(line.quantite), _format_number(line.prix_unitaire), _format_number(line.sous_total))):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | (Qt.AlignmentFlag.AlignRight if column else Qt.AlignmentFlag.AlignLeft))
+                self.lines_table.setItem(row, column, item)
+            self.lines_table.setRowHeight(row, 34)
+        self.subtotal_label.setText(_format_number(ticket.total))
+        self.received_label.setText(_format_number(ticket.montant_recu))
+        self.change_label.setText(_format_number(ticket.monnaie_rendue))
         self.total_label.setText(_format_cdf(ticket.total))
         for button in (self.print_button, self.pdf_button):
             button.setEnabled(True)
-
-    def _render_lines(self, ticket: TicketDocument) -> None:
-        self._clear_lines()
-        header = QGridLayout()
-        header.setColumnStretch(0, 0)
-        header.setColumnStretch(1, 4)
-        header.setColumnStretch(2, 1)
-        header.setColumnStretch(3, 1)
-        header.setColumnStretch(4, 1)
-        for column, text in enumerate(("#", "Produit", "Quantite", "Prix unitaire (CDF)", "Total (CDF)")):
-            label = QLabel(text)
-            label.setObjectName("ticketTableHeader")
-            header.addWidget(label, 0, column)
-        self.lines_layout.addLayout(header)
-        for index, line in enumerate(ticket.lignes, start=1):
-            row = QGridLayout()
-            row.setColumnStretch(0, 0)
-            row.setColumnStretch(1, 4)
-            row.setColumnStretch(2, 1)
-            row.setColumnStretch(3, 1)
-            row.setColumnStretch(4, 1)
-            values = (str(index), line.produit_nom, str(line.quantite), _format_number(line.prix_unitaire), _format_number(line.sous_total))
-            for column, text in enumerate(values):
-                label = QLabel(text)
-                label.setObjectName("ticketTableCell")
-                row.addWidget(label, 0, column)
-            self.lines_layout.addLayout(row)
-
-    def _clear_lines(self) -> None:
-        while self.lines_layout.count():
-            item = self.lines_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
-            nested = item.layout()
-            if nested is not None:
-                _clear_layout(nested)
 
     def _imprimer(self) -> None:
         if self._ticket is None:
@@ -260,7 +302,7 @@ class TicketPreviewPage(QWidget):
         try:
             self._impression_service.imprimer_ticket(self._ticket)
             self._ticket_service.journaliser_impression(self.session_utilisateur, self._ticket)
-            QMessageBox.information(self, "SALMOSPHARM", "Ticket envoye a l'imprimante.")
+            QMessageBox.information(self, "SALMOSPHARM", "Ticket envoyé à l'imprimante.")
         except ImprimanteIndisponibleError as exc:
             self._ticket_service.journaliser_erreur_impression(self.session_utilisateur, self._ticket, str(exc))
             QMessageBox.warning(self, "SALMOSPHARM", str(exc))
@@ -270,69 +312,65 @@ class TicketPreviewPage(QWidget):
     def _exporter_pdf(self) -> None:
         if self._ticket is None:
             return
-        default_name = f"{self._ticket.numero_vente}.pdf"
-        path, _ = QFileDialog.getSaveFileName(self, "Telecharger le ticket PDF", default_name, "PDF (*.pdf)")
-        if not path:
+        destination, _ = QFileDialog.getSaveFileName(self, "Télécharger la facture PDF", f"{self._ticket.numero_vente}.pdf", "PDF (*.pdf)")
+        if not destination:
             return
-        if not path.lower().endswith(".pdf"):
-            path = f"{path}.pdf"
         try:
-            self._ticket_service.exporter_pdf(self._ticket, path)
-            QMessageBox.information(self, "SALMOSPHARM", "PDF genere avec succes.")
+            self._ticket_service.exporter_pdf(self._ticket, destination if destination.lower().endswith(".pdf") else f"{destination}.pdf")
+            QMessageBox.information(self, "SALMOSPHARM", "PDF généré avec succès.")
         except SalmospharmError as exc:
             QMessageBox.warning(self, "SALMOSPHARM", str(exc))
 
 
-class _PartyBox(QFrame):
-    def __init__(self, title: str) -> None:
+class _MetricCard(QFrame):
+    def __init__(self, icon: str, color: str, title: str, value: str, trend: str) -> None:
         super().__init__()
-        self.setObjectName("ticketPartyBox")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(4)
+        self.setObjectName("invoiceMetricCard")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        icon_label = QLabel()
+        icon_label.setObjectName("invoiceMetricIcon")
+        icon_label.setPixmap(ui_icon(icon, "#ffffff", 20).pixmap(20, 20))
+        icon_label.setStyleSheet(f"background-color: {color};")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        text = QVBoxLayout()
         label = QLabel(title)
-        label.setObjectName("ticketPartyTitle")
-        self.value_label = QLabel("")
+        label.setObjectName("invoiceMetricTitle")
+        self.value_label = QLabel(value)
+        self.value_label.setObjectName("invoiceMetricValue")
+        trend_label = QLabel(trend)
+        trend_label.setObjectName("invoiceMetricTrend")
+        text.addWidget(label)
+        text.addWidget(self.value_label)
+        text.addWidget(trend_label)
+        layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(text, 1)
+
+    def set_value(self, value: str) -> None:
+        self.value_label.setText(value)
+
+
+class _PartyBox(QWidget):
+    def __init__(self, title: str, icon: str) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        title_label = QLabel(title)
+        title_label.setObjectName("ticketPartyTitle")
+        identity = QHBoxLayout()
+        icon_label = QLabel()
+        icon_label.setObjectName("invoicePartyIcon")
+        icon_label.setPixmap(ui_icon(icon, "#173b68", 17).pixmap(17, 17))
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.value_label = QLabel()
         self.value_label.setObjectName("ticketPartyValue")
-        self.sub_label = QLabel("")
+        self.sub_label = QLabel()
         self.sub_label.setObjectName("ticketPartySub")
-        layout.addWidget(label)
-        layout.addWidget(self.value_label)
+        identity.addWidget(icon_label)
+        identity.addWidget(self.value_label, 1)
+        layout.addWidget(title_label)
+        layout.addLayout(identity)
         layout.addWidget(self.sub_label)
-
-
-def _party_box(title: str) -> _PartyBox:
-    return _PartyBox(title)
-
-
-def _total_row(label_text: str, value_label: QLabel, *, strong: bool = False) -> QHBoxLayout:
-    row = QHBoxLayout()
-    label = QLabel(label_text)
-    label.setObjectName("ticketTotalLabelStrong" if strong else "ticketTotalLabel")
-    value_label.setObjectName("ticketTotalValueStrong" if strong else "ticketTotalValue")
-    row.addWidget(label)
-    row.addStretch(1)
-    row.addWidget(value_label)
-    return row
-
-
-def _clear_layout(layout) -> None:
-    while layout.count():
-        item = layout.takeAt(0)
-        child = item.widget()
-        if child is not None:
-            child.setParent(None)
-            child.deleteLater()
-        nested = item.layout()
-        if nested is not None:
-            _clear_layout(nested)
-
-
-def _fake_barcode(value: str) -> str:
-    pattern = []
-    for char in value[-16:]:
-        pattern.append("||" if ord(char) % 2 == 0 else "|")
-    return " ".join(pattern)
 
 
 def _format_number(value: int) -> str:

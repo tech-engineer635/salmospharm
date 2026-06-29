@@ -476,7 +476,7 @@ def test_ecrans_gerant_exposent_les_exports_excel_accessibles():
     app.processEvents()
 
 
-def test_navigation_affiche_page_placeholder_sans_acces_base():
+def test_navigation_affiche_ecran_factures_complet():
     app = _app()
     window = MainWindow(session_utilisateur=_session(ROLE_VENDEUR))
 
@@ -484,8 +484,10 @@ def test_navigation_affiche_page_placeholder_sans_acces_base():
     labels = [label.text() for label in window.findChildren(QLabel)]
 
     assert "Factures" in labels
-    assert "Facture / Recu" in labels
-    assert "Aucun ticket selectionne. Validez une vente pour afficher le recu." in labels
+    assert "Aperçu de la facture" in labels
+    assert "Factures du jour" in labels
+    assert "Montant total encaissé" in labels
+    assert "Sélectionnez une facture dans la liste." in labels
 
     window.close()
     app.processEvents()

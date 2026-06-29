@@ -1085,11 +1085,17 @@ Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
   1080x680; le defilement vertical reste disponible en hauteur reduite.
 - Contraste des champs verrouille par palette Qt pour eviter le texte ou les
   placeholders invisibles selon le theme Windows, y compris a l'etat desactive.
+- Ecran Factures reconstruit selon la maquette validee : indicateurs du jour,
+  recherche, historique a gauche, apercu detaille a droite, badge, pagination,
+  icones et actions impression/PDF. Les donnees restent derivees des ventes,
+  sans creation d'une table `factures`.
+- Sidebar conservee sur les fenetres de bureau a partir de 1180 px afin de
+  respecter les proportions de la maquette Factures.
 
 ### Validation executee
 
 ```txt
-113 tests pytest reussis
+115 tests pytest reussis
 Compilation de tous les modules app reussie
 python app/main.py lance avec succes dans un AppData temporaire
 Build PyInstaller reussi
