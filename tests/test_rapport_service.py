@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from app.core.constants import ACTION_CONNEXION_REUSSIE, ROLE_GERANT, ROLE_VENDEUR, TYPE_ALERTE_STOCK_FAIBLE
+from app.core.constants import ACTION_CONNEXION_REUSSIE, ROLE_GERANT, ROLE_VENDEUR, TYPE_ALERTE_EXPIRATION_PROCHE, TYPE_ALERTE_PRODUIT_EXPIRE, TYPE_ALERTE_STOCK_FAIBLE
 from app.core.exceptions import PermissionRefuseeError, ValidationError
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
@@ -176,6 +176,36 @@ def test_alertes_liste_marque_lue_et_refuse_vendeur(tmp_path):
 
     assert len(alertes) == 1
     assert alerte.est_lue == 1
+
+
+def test_alertes_recherche_pagination_et_synthese_reelles(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT, "gerant@test.local", "Gerant")
+    produit_id = _creer_produit(SessionLocal, "Paracetamol", 1000)
+    with SessionLocal() as session:
+        session.add_all(
+            [
+                Alerte(produit_id=produit_id, type_alerte=TYPE_ALERTE_STOCK_FAIBLE, message="Stock faible Paracetamol", est_lue=0),
+                Alerte(produit_id=produit_id, type_alerte=TYPE_ALERTE_EXPIRATION_PROCHE, message="Expiration proche Paracetamol", est_lue=0),
+                Alerte(produit_id=produit_id, type_alerte=TYPE_ALERTE_PRODUIT_EXPIRE, message="Produit expire Paracetamol", est_lue=1),
+            ]
+        )
+        session.commit()
+    service = AlerteService(session_factory=SessionLocal)
+
+    page = service.rechercher_alertes(gerant, terme="Paracetamol", limit=2)
+    expires = service.rechercher_alertes(gerant, type_alerte=TYPE_ALERTE_PRODUIT_EXPIRE)
+
+    engine.dispose()
+
+    assert page.total == 3
+    assert len(page.alertes) == 2
+    assert page.synthese.stock_faible == 1
+    assert page.synthese.expiration_proche == 1
+    assert page.synthese.produit_expire == 1
+    assert page.synthese.non_lues == 2
+    assert expires.total == 1
+    assert expires.alertes[0].est_lue == 1
 
 
 def test_historique_actions_gerant_lit_journal_et_vendeur_refuse(tmp_path):

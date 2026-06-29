@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         settings = getattr(self, "_page_widgets", {}).get("parametres")
         if settings is not None and hasattr(settings, "set_compact"):
             settings.set_compact(self.width() < 1200)
-        for key in ("dashboard", "vendeurs", "rapports"):
+        for key in ("dashboard", "vendeurs", "rapports", "alertes"):
             page = getattr(self, "_page_widgets", {}).get(key)
             if page is not None and hasattr(page, "set_compact"):
                 page.set_compact(self.width() < 1200)
@@ -158,6 +158,7 @@ class MainWindow(QMainWindow):
             alertes_page = AlertesPage(self.session_utilisateur, autoload=False)
             alertes_page.compteur_change.connect(self.topbar.set_alert_count)
             alertes_page.produit_demande.connect(self._ouvrir_produit)
+            alertes_page.navigation_demandee.connect(self.navigate)
             self._add_page("alertes", alertes_page)
             settings = SettingsPage(self.session_utilisateur)
             settings.redemarrage_demande.connect(self.redemarrage_demande.emit)
@@ -1231,6 +1232,133 @@ class MainWindow(QMainWindow):
             QWidget#historyPage,
             QWidget#alertsPage {
                 background-color: #fbfdff;
+            }
+            QLineEdit#alertsSearch {
+                min-height: 38px;
+                min-width: 340px;
+            }
+            QComboBox#alertsFilter {
+                min-height: 38px;
+                min-width: 180px;
+            }
+            QFrame#alertsMetricCard,
+            QFrame#alertsListPanel,
+            QFrame#alertsWatchPanel {
+                background-color: #ffffff;
+                border: 1px solid #e3e9ef;
+                border-radius: 10px;
+            }
+            QFrame#alertsMetricCard { min-height: 104px; }
+            QLabel#alertsMetricIcon_orange,
+            QLabel#alertsMetricIcon_yellow,
+            QLabel#alertsMetricIcon_red,
+            QLabel#alertsMetricIcon_violet { border-radius: 23px; }
+            QLabel#alertsMetricIcon_orange { background-color: #ff8614; }
+            QLabel#alertsMetricIcon_yellow { background-color: #e8ac08; }
+            QLabel#alertsMetricIcon_red { background-color: #ef4b55; }
+            QLabel#alertsMetricIcon_violet { background-color: #7c3fc0; }
+            QLabel#alertsMetricTitle {
+                color: #526b8b;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            QLabel#alertsMetricValue {
+                color: #073264;
+                font-size: 21px;
+                font-weight: 900;
+            }
+            QLabel#alertsMetricSubtitle {
+                color: #71839a;
+                font-size: 9px;
+            }
+            QLabel#alertsPanelTitle {
+                color: #073264;
+                font-size: 15px;
+                font-weight: 900;
+            }
+            QTableWidget#alertsTable {
+                background-color: #ffffff;
+                border: none;
+                color: #173b68;
+                font-size: 10px;
+                selection-background-color: #eef9f0;
+                selection-color: #073264;
+            }
+            QTableWidget#alertsTable QHeaderView::section {
+                background-color: #ffffff;
+                border: none;
+                border-bottom: 1px solid #e3e9ef;
+                color: #526b8b;
+                font-size: 9px;
+                font-weight: 700;
+                min-height: 30px;
+                padding: 0 5px;
+            }
+            QLabel#alertsBadge {
+                border-radius: 6px;
+                font-size: 9px;
+                font-weight: 800;
+                margin: 9px 4px;
+                padding: 3px 5px;
+            }
+            QLabel#alertsBadge[tone="orange"] { background-color: #fff3e5; color: #c65e00; }
+            QLabel#alertsBadge[tone="yellow"] { background-color: #fff8dc; color: #9a6b00; }
+            QLabel#alertsBadge[tone="red"] { background-color: #ffecef; color: #c92f3d; }
+            QLabel#alertsBadge[tone="green"] { background-color: #eaf8ee; color: #138736; }
+            QLabel#alertsBadge[tone="blue"] { background-color: #eaf3ff; color: #1269c7; }
+            QPushButton#alertsRowButton,
+            QPushButton#alertsPageButton {
+                background-color: #ffffff;
+                border: 1px solid #dce5ed;
+                border-radius: 6px;
+                color: #1269c7;
+                font-size: 9px;
+                min-height: 30px;
+                padding: 0 8px;
+            }
+            QPushButton#alertsPageButton { min-width: 30px; max-width: 30px; padding: 0; }
+            QLabel#alertsFooter,
+            QLabel#alertsEmpty {
+                color: #71839a;
+                font-size: 10px;
+            }
+            QLabel#alertsWatchSummary {
+                background-color: #eef9f0;
+                border-radius: 7px;
+                color: #138736;
+                font-size: 12px;
+                font-weight: 800;
+                padding: 12px;
+            }
+            QLabel#alertsWatchHeading {
+                color: #073264;
+                font-size: 11px;
+                font-weight: 900;
+                margin-top: 8px;
+            }
+            QLabel#alertsDistribution,
+            QLabel#alertsRecentItem {
+                color: #526b8b;
+                font-size: 10px;
+                line-height: 1.4;
+                padding: 6px 2px;
+            }
+            QPushButton#alertsPrimaryButton,
+            QPushButton#alertsSecondaryButton {
+                border-radius: 7px;
+                font-size: 11px;
+                font-weight: 800;
+                min-height: 38px;
+            }
+            QPushButton#alertsPrimaryButton {
+                background-color: #15933a;
+                border: none;
+                color: #ffffff;
+            }
+            QPushButton#alertsSecondaryButton {
+                background-color: #ffffff;
+                border: 1px solid #15933a;
+                color: #15933a;
             }
             QLabel#reportsTitle {
                 color: #073264;

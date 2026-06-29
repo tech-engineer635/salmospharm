@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from app.database.models import Alerte
+from app.database.models import Alerte, Produit
 
 
 class AlerteRepository:
@@ -49,16 +49,56 @@ class AlerteRepository:
         )
         return list(session.execute(statement).scalars().all())
 
-    def lister(self, session: Session, *, non_lues_seulement: bool = False, limit: int = 100) -> list[Alerte]:
+    def lister(
+        self,
+        session: Session,
+        *,
+        non_lues_seulement: bool = False,
+        terme: str = "",
+        type_alerte: str = "",
+        est_lue: int | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Alerte]:
         statement = (
             select(Alerte)
             .options(selectinload(Alerte.produit), selectinload(Alerte.lot))
+            .join(Alerte.produit)
             .where(Alerte.est_active == 1)
         )
         if non_lues_seulement:
             statement = statement.where(Alerte.est_lue == 0)
-        statement = statement.order_by(Alerte.cree_le.desc(), Alerte.id.desc()).limit(limit)
+        if terme.strip():
+            motif = f"%{terme.strip()}%"
+            statement = statement.where(or_(Alerte.message.ilike(motif), Produit.nom.ilike(motif)))
+        if type_alerte:
+            statement = statement.where(Alerte.type_alerte == type_alerte)
+        if est_lue is not None:
+            statement = statement.where(Alerte.est_lue == est_lue)
+        statement = (
+            statement.order_by(Alerte.cree_le.desc(), Alerte.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
         return list(session.execute(statement).scalars().all())
+
+    def compter(
+        self,
+        session: Session,
+        *,
+        terme: str = "",
+        type_alerte: str = "",
+        est_lue: int | None = None,
+    ) -> int:
+        statement = select(func.count(Alerte.id)).join(Alerte.produit).where(Alerte.est_active == 1)
+        if terme.strip():
+            motif = f"%{terme.strip()}%"
+            statement = statement.where(or_(Alerte.message.ilike(motif), Produit.nom.ilike(motif)))
+        if type_alerte:
+            statement = statement.where(Alerte.type_alerte == type_alerte)
+        if est_lue is not None:
+            statement = statement.where(Alerte.est_lue == est_lue)
+        return int(session.execute(statement).scalar_one())
 
     def creer(self, session: Session, alerte: Alerte) -> Alerte:
         session.add(alerte)

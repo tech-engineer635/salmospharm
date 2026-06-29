@@ -1099,11 +1099,17 @@ Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
   plus active), sans objectif fictif ni nouvelle table.
 - Dashboard gerant complete avec stock vendable reel, tendances comparees,
   journal recent et alertes stock/expiration separees.
+- Page Alertes reconstruite selon la maquette validee avec quatre compteurs
+  officiels, recherche, filtres, pagination, badges, tableau dense et panneau
+  `A surveiller`. Aucun fournisseur, commande, priorite ou conseil fictif n'a
+  ete ajoute.
+- Consultation des alertes etendue dans le service/repository avec terme, type,
+  etat lu, limite et decalage, sans migration de base.
 
 ### Validation executee
 
 ```txt
-117 tests pytest reussis
+118 tests pytest reussis
 Compilation de tous les modules app reussie
 python app/main.py lance avec succes dans un AppData temporaire
 Build PyInstaller reussi

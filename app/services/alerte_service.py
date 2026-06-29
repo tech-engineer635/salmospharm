@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -20,6 +21,21 @@ from app.repositories.lot_produit_repository import LotProduitRepository
 from app.repositories.produit_repository import ProduitRepository
 from app.repositories.stock_repository import StockRepository
 from app.services.auth_service import SessionUtilisateur
+
+
+@dataclass(frozen=True)
+class AlerteSynthese:
+    stock_faible: int
+    expiration_proche: int
+    produit_expire: int
+    non_lues: int
+
+
+@dataclass(frozen=True)
+class AlertePageResult:
+    alertes: list[Alerte]
+    total: int
+    synthese: AlerteSynthese
 
 
 class AlerteService:
@@ -61,6 +77,40 @@ class AlerteService:
         exiger_permission(utilisateur.role, PERMISSION_CONSULTER_RAPPORTS_GLOBAUX)
         with self._session_factory() as session:
             return self._alerte_repository.lister(session, non_lues_seulement=non_lues_seulement)
+
+    def rechercher_alertes(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        terme: str = "",
+        type_alerte: str = "",
+        est_lue: int | None = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> AlertePageResult:
+        """Retourne une page filtree et les compteurs globaux actifs."""
+
+        exiger_permission(utilisateur.role, PERMISSION_CONSULTER_RAPPORTS_GLOBAUX)
+        with self._session_factory() as session:
+            alertes = self._alerte_repository.lister(
+                session,
+                terme=terme,
+                type_alerte=type_alerte,
+                est_lue=est_lue,
+                limit=limit,
+                offset=offset,
+            )
+            total = self._alerte_repository.compter(
+                session, terme=terme, type_alerte=type_alerte, est_lue=est_lue
+            )
+            toutes = self._alerte_repository.lister(session, limit=10_000)
+            synthese = AlerteSynthese(
+                stock_faible=sum(a.type_alerte == TYPE_ALERTE_STOCK_FAIBLE for a in toutes),
+                expiration_proche=sum(a.type_alerte == TYPE_ALERTE_EXPIRATION_PROCHE for a in toutes),
+                produit_expire=sum(a.type_alerte == TYPE_ALERTE_PRODUIT_EXPIRE for a in toutes),
+                non_lues=sum(a.est_lue == 0 for a in toutes),
+            )
+            return AlertePageResult(alertes=alertes, total=total, synthese=synthese)
 
     def marquer_lue(self, utilisateur: SessionUtilisateur, *, alerte_id: int) -> None:
         """Marque une alerte comme lue, operation reservee au gerant."""
