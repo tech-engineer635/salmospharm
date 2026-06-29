@@ -1122,3 +1122,28 @@ Build PyInstaller reussi
 dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
 git diff --check sans erreur
 ```
+
+## Fiabilisation authentification et comptes vendeurs
+
+- Creation vendeur protegee par une double saisie du mot de passe et une
+  verification immediate du hash bcrypt avant enregistrement.
+- Identifiants normalises et recherches sans sensibilite a la casse, y compris
+  pour les anciennes donnees locales.
+- Identifiant reellement enregistre affiche dans une boite de dialogue avec
+  action de copie apres la creation.
+- Recuperation autonome reservee au gerant. Les vendeurs n'ont plus de code de
+  recuperation et leur mot de passe est reinitialise explicitement par le
+  gerant avec confirmation.
+- Modification du profil vendeur separee de la reinitialisation du mot de passe.
+- Diagnostic des echecs de connexion enrichi dans le journal sans conserver le
+  mot de passe saisi.
+- Tests ajoutes pour creation puis connexion sur la meme base, casse et espaces,
+  confirmation, hash invalide, reinitialisation et restriction de recuperation.
+
+### Validation executee
+
+```txt
+127 tests pytest reussis
+python app/main.py lance avec succes dans un AppData temporaire
+git diff --check sans erreur
+```

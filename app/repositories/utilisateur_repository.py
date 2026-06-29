@@ -18,11 +18,15 @@ class UtilisateurRepository:
         return session.get(Utilisateur, utilisateur_id)
 
     def existe_par_email(self, session: Session, email: str) -> bool:
-        statement = select(Utilisateur.id).where(Utilisateur.email == email)
+        statement = select(Utilisateur.id).where(
+            func.lower(Utilisateur.email) == email.strip().lower()
+        )
         return session.execute(statement).first() is not None
 
     def chercher_par_email(self, session: Session, email: str) -> Utilisateur | None:
-        statement = select(Utilisateur).where(Utilisateur.email == email)
+        statement = select(Utilisateur).where(
+            func.lower(Utilisateur.email) == email.strip().lower()
+        )
         return session.execute(statement).scalar_one_or_none()
 
     def lister(self, session: Session) -> list[Utilisateur]:

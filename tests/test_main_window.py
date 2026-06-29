@@ -248,6 +248,8 @@ def test_page_vendeurs_formulaire_sans_champ_role_et_accessible_plein_ecran():
 
     assert "Rôle *" not in labels
     assert "Role *" not in labels
+    assert page.confirm_password_input.echoMode() == QLineEdit.EchoMode.Password
+    assert not page.reset_password_button.isVisible()
     assert scroll.verticalScrollBar().maximum() == 0
     assert button_bottom <= scroll.viewport().height()
 

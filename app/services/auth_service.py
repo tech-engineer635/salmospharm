@@ -84,7 +84,7 @@ class AuthService:
                     session,
                     utilisateur_id=None,
                     identifiant=identifiant_normalise,
-                    raison="identifiant inconnu",
+                    raison="compte_trouve=non; actif=non_verifie; hash_valide=non_verifie",
                 )
                 session.commit()
                 raise AuthentificationError("Identifiant ou mot de passe incorrect.")
@@ -94,7 +94,7 @@ class AuthService:
                     session,
                     utilisateur_id=utilisateur.id,
                     identifiant=identifiant_normalise,
-                    raison="compte desactive",
+                    raison="compte_trouve=oui; actif=non; hash_valide=non_verifie",
                 )
                 session.commit()
                 raise UtilisateurInactifError("Ce compte est desactive. Veuillez contacter le gerant.")
@@ -104,7 +104,7 @@ class AuthService:
                     session,
                     utilisateur_id=utilisateur.id,
                     identifiant=identifiant_normalise,
-                    raison="mot de passe incorrect",
+                    raison="compte_trouve=oui; actif=oui; hash_valide=non",
                 )
                 session.commit()
                 raise AuthentificationError("Identifiant ou mot de passe incorrect.")
@@ -201,6 +201,7 @@ class AuthService:
             )
             if (
                 utilisateur is None
+                or utilisateur.role != ROLE_GERANT
                 or not utilisateur.code_recuperation_hash
                 or not self._recuperation_service.verifier_code(
                     code_recuperation.strip(), utilisateur.code_recuperation_hash

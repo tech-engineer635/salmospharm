@@ -18,7 +18,12 @@ from app.core.exceptions import (
     UtilisateurInactifError,
     ValidationError,
 )
-from app.core.security import hasher_mot_de_passe, verifier_code_recuperation, verifier_mot_de_passe
+from app.core.security import (
+    hasher_code_recuperation,
+    hasher_mot_de_passe,
+    verifier_code_recuperation,
+    verifier_mot_de_passe,
+)
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
 from app.database.models import JournalActivite, Utilisateur
@@ -208,7 +213,9 @@ def test_connecter_refuse_mauvais_mot_de_passe_et_journalise_echec(tmp_path):
     engine.dispose()
 
     assert journal.utilisateur_id == result.utilisateur_id
-    assert "mot de passe incorrect" in (journal.details or "")
+    assert "compte_trouve=oui" in (journal.details or "")
+    assert "hash_valide=non" in (journal.details or "")
+    assert "erreur" not in (journal.details or "")
     assert "erreur" not in (journal.details or "")
 
 
@@ -258,7 +265,32 @@ def test_connecter_refuse_vendeur_desactive_et_journalise_echec(tmp_path):
     engine.dispose()
 
     assert journal.utilisateur_id == vendeur_id
-    assert "compte desactive" in (journal.details or "")
+    assert "compte_trouve=oui" in (journal.details or "")
+    assert "actif=non" in (journal.details or "")
+
+
+def test_connecter_refuse_un_hash_invalide_sans_erreur_technique(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    service = AuthService(session_factory=SessionLocal)
+    with SessionLocal() as session:
+        session.add(
+            Utilisateur(
+                nom="Vendeur",
+                email="vendeur",
+                mot_de_passe_hash="hash-invalide",
+                role=ROLE_VENDEUR,
+                actif=1,
+            )
+        )
+        session.commit()
+
+    with pytest.raises(
+        AuthentificationError,
+        match="Identifiant ou mot de passe incorrect",
+    ):
+        service.connecter(identifiant="vendeur", mot_de_passe="abcde")
+
+    engine.dispose()
 
 
 def test_session_utilisateur_ne_contient_aucune_donnee_sensible():
@@ -290,6 +322,34 @@ def test_connecter_refuse_role_non_officiel_avant_creation_session():
 
     with pytest.raises(PermissionRefuseeError, match="Role utilisateur non autorise"):
         service.connecter(identifiant="role-invalide", mot_de_passe="abcde")
+
+
+def test_recuperation_autonome_refusee_pour_un_vendeur(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    service = AuthService(session_factory=SessionLocal)
+    code = "SALMOS-AAAA-BBBB-CCCC"
+    with SessionLocal() as session:
+        session.add(
+            Utilisateur(
+                nom="Vendeur",
+                email="vendeur",
+                mot_de_passe_hash=hasher_mot_de_passe("ancien"),
+                code_recuperation_hash=hasher_code_recuperation(code),
+                role=ROLE_VENDEUR,
+                actif=1,
+            )
+        )
+        session.commit()
+
+    with pytest.raises(AuthentificationError, match="Identifiant ou code"):
+        service.reinitialiser_mot_de_passe(
+            identifiant="vendeur",
+            code_recuperation=code,
+            nouveau_mot_de_passe="nouveau",
+            confirmation_mot_de_passe="nouveau",
+        )
+
+    engine.dispose()
 
 
 def _create_test_session_factory(tmp_path):

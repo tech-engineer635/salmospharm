@@ -7,27 +7,42 @@ from sqlalchemy.orm import sessionmaker
 from app.core.constants import (
     ACTION_UTILISATEUR_CREE,
     ACTION_UTILISATEUR_DESACTIVE,
+    ACTION_MOT_DE_PASSE_REINITIALISE,
     ACTION_UTILISATEUR_REACTIVE,
     ROLE_GERANT,
     ROLE_VENDEUR,
 )
-from app.core.exceptions import PermissionRefuseeError, UtilisateurExisteDejaError, ValidationError
-from app.core.security import verifier_code_recuperation, verifier_mot_de_passe
+from app.core.exceptions import (
+    AuthentificationError,
+    PermissionRefuseeError,
+    UtilisateurExisteDejaError,
+    ValidationError,
+)
+from app.core.security import verifier_mot_de_passe
 from app.database.connection import create_app_engine
 from app.database.init_db import init_database
 from app.database.models import JournalActivite, Utilisateur, Vente
-from app.services.auth_service import SessionUtilisateur
-from app.services.utilisateur_service import UtilisateurService, VendeurPayload
+from app.services.auth_service import AuthService, SessionUtilisateur
+from app.services.utilisateur_service import (
+    ReinitialisationMotDePasseVendeurPayload,
+    UtilisateurService,
+    VendeurPayload,
+)
 
 
-def test_creer_vendeur_hash_mot_de_passe_code_et_journalise(tmp_path):
+def test_creer_vendeur_hash_mot_de_passe_sans_code_et_journalise(tmp_path):
     engine, SessionLocal = _create_test_session_factory(tmp_path)
     gerant = _creer_session_utilisateur(SessionLocal, ROLE_GERANT)
     service = UtilisateurService(session_factory=SessionLocal)
 
     result = service.creer_vendeur(
         gerant,
-        VendeurPayload(nom_complet="Jean K.", identifiant="Jean.K", mot_de_passe="Secret123"),
+        VendeurPayload(
+            nom_complet="Jean K.",
+            identifiant=" Jean.K ",
+            mot_de_passe="Secret123",
+            confirmation_mot_de_passe="Secret123",
+        ),
     )
 
     with SessionLocal() as session:
@@ -42,8 +57,78 @@ def test_creer_vendeur_hash_mot_de_passe_code_et_journalise(tmp_path):
     assert vendeur.actif == 1
     assert vendeur.mot_de_passe_hash != "Secret123"
     assert verifier_mot_de_passe("Secret123", vendeur.mot_de_passe_hash)
-    assert verifier_code_recuperation(result.code_recuperation, vendeur.code_recuperation_hash)
+    assert vendeur.code_recuperation_hash is None
+    assert result.identifiant == "jean.k"
     assert ACTION_UTILISATEUR_CREE in [journal.action for journal in journaux]
+    assert all("Secret123" not in (journal.details or "") for journal in journaux)
+
+
+def test_creation_puis_connexion_vendeur_utilisent_la_meme_base(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_session_utilisateur(SessionLocal, ROLE_GERANT)
+    utilisateurs = UtilisateurService(session_factory=SessionLocal)
+    auth = AuthService(session_factory=SessionLocal)
+
+    utilisateurs.creer_vendeur(
+        gerant,
+        VendeurPayload(
+            nom_complet="Alice M.",
+            identifiant=" Alice ",
+            mot_de_passe="MotDePasse1",
+            confirmation_mot_de_passe="MotDePasse1",
+        ),
+    )
+    session_vendeur = auth.connecter(
+        identifiant=" ALICE ",
+        mot_de_passe="MotDePasse1",
+    )
+
+    engine.dispose()
+
+    assert session_vendeur.identifiant == "alice"
+    assert session_vendeur.role == ROLE_VENDEUR
+
+
+def test_creation_refuse_confirmation_differente(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_session_utilisateur(SessionLocal, ROLE_GERANT)
+    service = UtilisateurService(session_factory=SessionLocal)
+
+    with pytest.raises(ValidationError, match="confirmation"):
+        service.creer_vendeur(
+            gerant,
+            VendeurPayload(
+                nom_complet="Alice",
+                identifiant="alice",
+                mot_de_passe="Secret123",
+                confirmation_mot_de_passe="Secret124",
+            ),
+        )
+
+    engine.dispose()
+
+
+def test_creation_annulee_si_le_hash_ne_peut_pas_etre_verifie(tmp_path, monkeypatch):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_session_utilisateur(SessionLocal, ROLE_GERANT)
+    service = UtilisateurService(session_factory=SessionLocal)
+    monkeypatch.setattr(
+        "app.services.utilisateur_service.verifier_mot_de_passe",
+        lambda _secret, _hash: False,
+    )
+
+    with pytest.raises(ValidationError, match="securiser"):
+        service.creer_vendeur(
+            gerant,
+            VendeurPayload("Alice", "alice", "Secret123", "Secret123"),
+        )
+
+    with SessionLocal() as session:
+        assert session.execute(
+            select(Utilisateur).where(Utilisateur.email == "alice")
+        ).scalar_one_or_none() is None
+
+    engine.dispose()
 
 
 def test_creer_vendeur_refuse_doublon_admin_admin_et_role_non_autorise(tmp_path):
@@ -54,28 +139,57 @@ def test_creer_vendeur_refuse_doublon_admin_admin_et_role_non_autorise(tmp_path)
 
     service.creer_vendeur(
         gerant,
-        VendeurPayload(nom_complet="Jean K.", identifiant="jean", mot_de_passe="abcde"),
+        VendeurPayload("Jean K.", "Jean", "abcde", "abcde"),
     )
 
     with pytest.raises(UtilisateurExisteDejaError):
         service.creer_vendeur(
             gerant,
-            VendeurPayload(nom_complet="Jean Bis", identifiant="jean", mot_de_passe="abcde"),
+            VendeurPayload("Jean Bis", " JEAN ", "abcde", "abcde"),
         )
 
     with pytest.raises(ValidationError):
         service.creer_vendeur(
             gerant,
-            VendeurPayload(nom_complet="Admin", identifiant="admin", mot_de_passe="admin"),
+            VendeurPayload("Admin", "admin", "admin", "admin"),
         )
 
     with pytest.raises(PermissionRefuseeError):
         service.creer_vendeur(
             vendeur,
-            VendeurPayload(nom_complet="Alice", identifiant="alice", mot_de_passe="abcde"),
+            VendeurPayload("Alice", "alice", "abcde", "abcde"),
         )
 
     engine.dispose()
+
+
+def test_reinitialiser_mot_de_passe_vendeur_invalide_ancien_et_accepte_nouveau(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    gerant = _creer_session_utilisateur(SessionLocal, ROLE_GERANT)
+    service = UtilisateurService(session_factory=SessionLocal)
+    auth = AuthService(session_factory=SessionLocal)
+    creation = service.creer_vendeur(
+        gerant,
+        VendeurPayload("Alice", "alice", "ancien", "ancien"),
+    )
+
+    service.reinitialiser_mot_de_passe_vendeur(
+        gerant,
+        vendeur_id=creation.utilisateur_id,
+        payload=ReinitialisationMotDePasseVendeurPayload("nouveau", "nouveau"),
+    )
+
+    with pytest.raises(AuthentificationError):
+        auth.connecter(identifiant="alice", mot_de_passe="ancien")
+    assert auth.connecter(identifiant="alice", mot_de_passe="nouveau").role == ROLE_VENDEUR
+    with SessionLocal() as session:
+        actions = [
+            journal.action
+            for journal in session.execute(select(JournalActivite)).scalars().all()
+        ]
+
+    engine.dispose()
+    assert ACTION_MOT_DE_PASSE_REINITIALISE in actions
 
 
 def test_desactiver_et_reactiver_vendeur(tmp_path):

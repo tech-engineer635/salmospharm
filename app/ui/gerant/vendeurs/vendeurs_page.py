@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -22,6 +25,7 @@ from app.core.exceptions import SalmospharmError
 from app.services.auth_service import SessionUtilisateur
 from app.services.utilisateur_service import (
     ModificationVendeurPayload,
+    ReinitialisationMotDePasseVendeurPayload,
     UtilisateurService,
     VendeurDashboardData,
     VendeurPayload,
@@ -186,17 +190,34 @@ class VendeursPage(QWidget):
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Entrez le mot de passe")
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        for field in (self.name_input, self.identifier_input, self.password_input):
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setPlaceholderText("Confirmez le mot de passe")
+        self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        for field in (
+            self.name_input,
+            self.identifier_input,
+            self.password_input,
+            self.confirm_password_input,
+        ):
             field.setObjectName("vendorFormInput")
         self.name_input.setAccessibleName("Nom complet du vendeur")
         self.identifier_input.setAccessibleName("Identifiant du vendeur")
         self.password_input.setAccessibleName("Mot de passe du vendeur")
+        self.confirm_password_input.setAccessibleName(
+            "Confirmation du mot de passe du vendeur"
+        )
 
         layout.addLayout(_field_group("Nom complet *", self.name_input))
         layout.addLayout(_field_group("Email ou identifiant *", self.identifier_input))
         layout.addLayout(_field_group("Mot de passe *", self.password_input))
+        layout.addLayout(
+            _field_group("Confirmer le mot de passe *", self.confirm_password_input)
+        )
 
-        note = QLabel("Le compte sera cree comme vendeur. Remettez le mot de passe et le code de recuperation au vendeur.")
+        note = QLabel(
+            "Le mot de passe est sensible aux majuscules. En cas d'oubli, "
+            "le gerant devra le reinitialiser."
+        )
         note.setObjectName("vendorInfo")
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -212,9 +233,16 @@ class VendeursPage(QWidget):
         self.save_button.clicked.connect(self._creer_vendeur)
         self.save_button.setDefault(True)
         self.password_input.returnPressed.connect(self._creer_vendeur)
+        self.confirm_password_input.returnPressed.connect(self._creer_vendeur)
         buttons.addWidget(cancel)
         buttons.addWidget(self.save_button)
         layout.addLayout(buttons)
+
+        self.reset_password_button = QPushButton("Reinitialiser le mot de passe")
+        self.reset_password_button.setObjectName("outlineButton")
+        self.reset_password_button.clicked.connect(self._reinitialiser_mot_de_passe)
+        self.reset_password_button.setVisible(False)
+        layout.addWidget(self.reset_password_button)
         return panel
 
     def _charger(self) -> None:
@@ -276,7 +304,6 @@ class VendeursPage(QWidget):
                     payload=ModificationVendeurPayload(
                         nom_complet=self.name_input.text(),
                         identifiant=self.identifier_input.text(),
-                        nouveau_mot_de_passe=self.password_input.text(),
                     ),
                 )
                 self._vider_formulaire()
@@ -289,14 +316,31 @@ class VendeursPage(QWidget):
                     nom_complet=self.name_input.text(),
                     identifiant=self.identifier_input.text(),
                     mot_de_passe=self.password_input.text(),
+                    confirmation_mot_de_passe=self.confirm_password_input.text(),
                 ),
             )
+            identifiant_cree = result.identifiant
             self._vider_formulaire()
             self._charger()
-            self._afficher_info(
-                "Compte vendeur cree. Code de recuperation a remettre une seule fois : "
-                f"{result.code_recuperation}"
+            IdentifiantVendeurDialog(identifiant_cree, self).exec()
+        except SalmospharmError as exc:
+            self._afficher_erreur(str(exc))
+
+    def _reinitialiser_mot_de_passe(self) -> None:
+        if self._selected_vendor_id is None:
+            return
+        try:
+            self._utilisateur_service.reinitialiser_mot_de_passe_vendeur(
+                self.session_utilisateur,
+                vendeur_id=self._selected_vendor_id,
+                payload=ReinitialisationMotDePasseVendeurPayload(
+                    nouveau_mot_de_passe=self.password_input.text(),
+                    confirmation_mot_de_passe=self.confirm_password_input.text(),
+                ),
             )
+            self.password_input.clear()
+            self.confirm_password_input.clear()
+            self._afficher_info("Mot de passe vendeur reinitialise.")
         except SalmospharmError as exc:
             self._afficher_erreur(str(exc))
 
@@ -324,8 +368,11 @@ class VendeursPage(QWidget):
         self.name_input.clear()
         self.identifier_input.clear()
         self.password_input.clear()
+        self.confirm_password_input.clear()
         self.password_input.setPlaceholderText("Entrez le mot de passe")
+        self.confirm_password_input.setPlaceholderText("Confirmez le mot de passe")
         self.save_button.setText("Creer le compte")
+        self.reset_password_button.setVisible(False)
 
     def _charger_selection(self) -> None:
         row = self.vendors_table.currentRow()
@@ -349,10 +396,15 @@ class VendeursPage(QWidget):
         self.name_input.setText(vendeur.nom)
         self.identifier_input.setText(vendeur.identifiant)
         self.password_input.clear()
+        self.confirm_password_input.clear()
         self.password_input.setPlaceholderText(
-            "Laisser vide pour conserver le mot de passe"
+            "Nouveau mot de passe"
+        )
+        self.confirm_password_input.setPlaceholderText(
+            "Confirmez le nouveau mot de passe"
         )
         self.save_button.setText("Enregistrer")
+        self.reset_password_button.setVisible(True)
 
     def _focus_form(self) -> None:
         if hasattr(self, "name_input"):
@@ -395,6 +447,38 @@ class VendorMetricCard(QFrame):
     def set_value(self, value: str, subtitle: str) -> None:
         self.value_label.setText(value)
         self.subtitle_label.setText(subtitle)
+
+
+class IdentifiantVendeurDialog(QDialog):
+    """Affiche l'identifiant normalise et permet au gerant de le copier."""
+
+    def __init__(self, identifiant: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Compte vendeur cree")
+        self.setModal(True)
+        layout = QVBoxLayout(self)
+
+        message = QLabel(
+            "Le compte vendeur a ete cree. Transmettez exactement cet identifiant "
+            "et rappelez que le mot de passe est sensible aux majuscules."
+        )
+        message.setWordWrap(True)
+        layout.addWidget(message)
+
+        self.identifiant_input = QLineEdit(identifiant)
+        self.identifiant_input.setReadOnly(True)
+        self.identifiant_input.setAccessibleName("Identifiant vendeur cree")
+        layout.addWidget(self.identifiant_input)
+
+        copy_button = QPushButton("Copier l'identifiant")
+        copy_button.clicked.connect(
+            lambda: QApplication.clipboard().setText(self.identifiant_input.text())
+        )
+        layout.addWidget(copy_button)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(self.accept)
+        layout.addWidget(buttons)
 
 
 def _field_group(label_text: str, field: QWidget) -> QVBoxLayout:

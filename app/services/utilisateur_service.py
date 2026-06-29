@@ -10,8 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import (
-    ACTION_CODE_RECUPERATION_GENERE,
     ACTION_CONNEXION_REUSSIE,
+    ACTION_MOT_DE_PASSE_REINITIALISE,
     ACTION_UTILISATEUR_CREE,
     ACTION_UTILISATEUR_DESACTIVE,
     ACTION_UTILISATEUR_MODIFIE,
@@ -26,7 +26,7 @@ from app.core.permissions import (
     PERMISSION_CONSULTER_TOUTES_VENTES,
     exiger_permission,
 )
-from app.core.security import hasher_mot_de_passe
+from app.core.security import hasher_mot_de_passe, verifier_mot_de_passe
 from app.database.connection import create_session
 from app.database.models import Utilisateur
 from app.repositories.journal_repository import JournalRepository
@@ -34,7 +34,6 @@ from app.repositories.utilisateur_repository import UtilisateurRepository
 from app.repositories.vente_repository import VenteRepository
 from app.services.auth_service import SessionUtilisateur
 from app.services.journal_service import JournalService
-from app.services.recuperation_service import RecuperationService
 
 
 @dataclass(frozen=True)
@@ -42,19 +41,25 @@ class VendeurPayload:
     nom_complet: str
     identifiant: str
     mot_de_passe: str
+    confirmation_mot_de_passe: str
 
 
 @dataclass(frozen=True)
 class ModificationVendeurPayload:
     nom_complet: str
     identifiant: str
-    nouveau_mot_de_passe: str = ""
+
+
+@dataclass(frozen=True)
+class ReinitialisationMotDePasseVendeurPayload:
+    nouveau_mot_de_passe: str
+    confirmation_mot_de_passe: str
 
 
 @dataclass(frozen=True)
 class CreationVendeurResult:
     utilisateur_id: int
-    code_recuperation: str
+    identifiant: str
 
 
 @dataclass(frozen=True)
@@ -91,14 +96,12 @@ class UtilisateurService:
         vente_repository: VenteRepository | None = None,
         journal_repository: JournalRepository | None = None,
         journal_service: JournalService | None = None,
-        recuperation_service: RecuperationService | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._utilisateur_repository = utilisateur_repository or UtilisateurRepository()
         self._vente_repository = vente_repository or VenteRepository()
         self._journal_repository = journal_repository or JournalRepository()
         self._journal_service = journal_service or JournalService()
-        self._recuperation_service = recuperation_service or RecuperationService()
 
     def tableau_vendeurs(
         self,
@@ -132,12 +135,18 @@ class UtilisateurService:
             if self._utilisateur_repository.existe_par_email(session, donnees.identifiant):
                 raise UtilisateurExisteDejaError("Cet identifiant est deja utilise.")
 
-            code_recuperation = self._recuperation_service.generer_code_hash()
+            mot_de_passe_hash = hasher_mot_de_passe(donnees.mot_de_passe)
+            # Une creation ne doit jamais etre validee si le hash produit ne peut
+            # pas etre relu dans l'environnement courant.
+            if not verifier_mot_de_passe(donnees.mot_de_passe, mot_de_passe_hash):
+                raise ValidationError(
+                    "Impossible de securiser le mot de passe. Veuillez reessayer."
+                )
             vendeur = Utilisateur(
                 nom=donnees.nom_complet,
                 email=donnees.identifiant,
-                mot_de_passe_hash=hasher_mot_de_passe(donnees.mot_de_passe),
-                code_recuperation_hash=code_recuperation.code_hash,
+                mot_de_passe_hash=mot_de_passe_hash,
+                code_recuperation_hash=None,
                 doit_changer_mot_de_passe=0,
                 role=ROLE_VENDEUR,
                 actif=1,
@@ -152,20 +161,15 @@ class UtilisateurService:
                     element_id=vendeur.id,
                     details=f"Vendeur cree: {vendeur.email}.",
                 )
-                self._journal_service.journaliser(
-                    session,
-                    action=ACTION_CODE_RECUPERATION_GENERE,
-                    utilisateur_id=utilisateur.utilisateur_id,
-                    table_cible="utilisateurs",
-                    element_id=vendeur.id,
-                    details="Code de recuperation vendeur genere et affiche une seule fois.",
-                )
                 session.commit()
             except IntegrityError as exc:
                 session.rollback()
                 raise ValidationError("Impossible de creer le vendeur.") from exc
 
-            return CreationVendeurResult(utilisateur_id=vendeur.id, code_recuperation=code_recuperation.code)
+            return CreationVendeurResult(
+                utilisateur_id=vendeur.id,
+                identifiant=vendeur.email,
+            )
 
     def desactiver_vendeur(self, utilisateur: SessionUtilisateur, *, vendeur_id: int) -> None:
         exiger_permission(utilisateur.role, PERMISSION_DESACTIVER_UTILISATEUR)
@@ -198,10 +202,6 @@ class UtilisateurService:
             raise ValidationError("Le nom complet est obligatoire.")
         if not identifiant:
             raise ValidationError("L'identifiant est obligatoire.")
-        if payload.nouveau_mot_de_passe and len(payload.nouveau_mot_de_passe) < 5:
-            raise ValidationError(
-                "Le nouveau mot de passe doit contenir au moins 5 caracteres."
-            )
         with self._session_factory() as session:
             vendeur = self._obtenir_vendeur(session, vendeur_id)
             existant = self._utilisateur_repository.chercher_par_email(
@@ -211,10 +211,6 @@ class UtilisateurService:
                 raise UtilisateurExisteDejaError("Cet identifiant est deja utilise.")
             vendeur.nom = nom
             vendeur.email = identifiant
-            if payload.nouveau_mot_de_passe:
-                vendeur.mot_de_passe_hash = hasher_mot_de_passe(
-                    payload.nouveau_mot_de_passe
-                )
             self._utilisateur_repository.mettre_a_jour(session, vendeur)
             self._journal_service.journaliser(
                 session,
@@ -223,6 +219,45 @@ class UtilisateurService:
                 table_cible="utilisateurs",
                 element_id=vendeur.id,
                 details=f"Vendeur modifie: {vendeur.email}.",
+            )
+            session.commit()
+
+    def reinitialiser_mot_de_passe_vendeur(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        vendeur_id: int,
+        payload: ReinitialisationMotDePasseVendeurPayload,
+    ) -> None:
+        """Permet uniquement au gerant de remplacer le mot de passe d'un vendeur."""
+        exiger_permission(utilisateur.role, PERMISSION_MODIFIER_UTILISATEUR)
+        nouveau_mot_de_passe = payload.nouveau_mot_de_passe
+        if not nouveau_mot_de_passe:
+            raise ValidationError("Le nouveau mot de passe est obligatoire.")
+        if nouveau_mot_de_passe != payload.confirmation_mot_de_passe:
+            raise ValidationError("La confirmation ne correspond pas au mot de passe.")
+        if len(nouveau_mot_de_passe) < 5:
+            raise ValidationError(
+                "Le nouveau mot de passe doit contenir au moins 5 caracteres."
+            )
+
+        mot_de_passe_hash = hasher_mot_de_passe(nouveau_mot_de_passe)
+        if not verifier_mot_de_passe(nouveau_mot_de_passe, mot_de_passe_hash):
+            raise ValidationError(
+                "Impossible de securiser le mot de passe. Veuillez reessayer."
+            )
+
+        with self._session_factory() as session:
+            vendeur = self._obtenir_vendeur(session, vendeur_id)
+            vendeur.mot_de_passe_hash = mot_de_passe_hash
+            self._utilisateur_repository.mettre_a_jour(session, vendeur)
+            self._journal_service.journaliser(
+                session,
+                action=ACTION_MOT_DE_PASSE_REINITIALISE,
+                utilisateur_id=utilisateur.utilisateur_id,
+                table_cible="utilisateurs",
+                element_id=vendeur.id,
+                details=f"Mot de passe vendeur reinitialise: {vendeur.email}.",
             )
             session.commit()
 
@@ -280,8 +315,15 @@ class UtilisateurService:
             raise ValidationError("L'identifiant est obligatoire.")
         if not payload.mot_de_passe:
             raise ValidationError("Le mot de passe est obligatoire.")
+        if payload.mot_de_passe != payload.confirmation_mot_de_passe:
+            raise ValidationError("La confirmation ne correspond pas au mot de passe.")
         if identifiant == "admin" and payload.mot_de_passe.lower() == "admin":
             raise ValidationError("Le compte admin/admin est interdit.")
         if len(payload.mot_de_passe) < 5:
             raise ValidationError("Le mot de passe doit contenir au moins 5 caracteres.")
-        return VendeurPayload(nom_complet=nom, identifiant=identifiant, mot_de_passe=payload.mot_de_passe)
+        return VendeurPayload(
+            nom_complet=nom,
+            identifiant=identifiant,
+            mot_de_passe=payload.mot_de_passe,
+            confirmation_mot_de_passe=payload.confirmation_mot_de_passe,
+        )
