@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         settings = getattr(self, "_page_widgets", {}).get("parametres")
         if settings is not None and hasattr(settings, "set_compact"):
             settings.set_compact(self.width() < 1200)
-        for key in ("vendeurs", "rapports"):
+        for key in ("dashboard", "vendeurs", "rapports"):
             page = getattr(self, "_page_widgets", {}).get(key)
             if page is not None and hasattr(page, "set_compact"):
                 page.set_compact(self.width() < 1200)
@@ -254,6 +254,8 @@ class MainWindow(QMainWindow):
             page.selectionner_produit(produit_id)
 
     def _page_title_for_session(self, key: str) -> str:
+        if self.session_utilisateur.role == ROLE_VENDEUR and key == "dashboard":
+            return "Tableau de bord vendeur"
         if self.session_utilisateur.role == ROLE_VENDEUR and key == "produits":
             return "Recherche produit"
         return _page_title(key)
@@ -591,6 +593,144 @@ class MainWindow(QMainWindow):
                 border: 1px solid #edf1f4;
                 border-radius: 10px;
             }
+            QWidget#managerDashboard,
+            QWidget#sellerDashboard {
+                background-color: #fbfdff;
+                font-family: "Segoe UI";
+            }
+            QFrame#dashboardMetricCard,
+            QFrame#salesEvolutionPanel,
+            QFrame#topProductsPanel,
+            QFrame#vendorSummaryPanel,
+            QFrame#recentActivityPanel,
+            QFrame#quickAlertsPanel,
+            QFrame#sellerEvolutionPanel,
+            QFrame#sellerRecentSalesPanel,
+            QFrame#sellerTopProductsPanel,
+            QFrame#sellerSummaryPanel {
+                background-color: #ffffff;
+                border: 1px solid #e3e9ef;
+                border-radius: 10px;
+            }
+            QFrame#dashboardMetricCard {
+                min-height: 104px;
+            }
+            QLabel#dashboardMetricIcon_green,
+            QLabel#dashboardMetricIcon_blue,
+            QLabel#dashboardMetricIcon_orange,
+            QLabel#dashboardMetricIcon_red {
+                border-radius: 23px;
+            }
+            QLabel#dashboardMetricIcon_green { background-color: #16a33a; }
+            QLabel#dashboardMetricIcon_blue { background-color: #1f74d8; }
+            QLabel#dashboardMetricIcon_orange { background-color: #ff8614; }
+            QLabel#dashboardMetricIcon_red { background-color: #ef4b55; }
+            QLabel#dashboardMetricTitle {
+                color: #526b8b;
+                font-size: 11px;
+            }
+            QLabel#dashboardMetricValue {
+                color: #073264;
+                font-size: 19px;
+                font-weight: 900;
+            }
+            QLabel#dashboardMetricTrend {
+                color: #64748b;
+                font-size: 9px;
+                font-weight: 700;
+            }
+            QLabel#dashboardMetricTrend[trend="positive"] { color: #15933a; }
+            QLabel#dashboardMetricTrend[trend="negative"] { color: #ef4b55; }
+            QLabel#dashboardPanelTitle {
+                color: #073264;
+                font-size: 14px;
+                font-weight: 900;
+            }
+            QPushButton#dashboardLinkButton {
+                background: transparent;
+                border: none;
+                color: #1269c7;
+                font-size: 10px;
+                font-weight: 700;
+                min-height: 24px;
+                padding: 0 4px;
+            }
+            QPushButton#dashboardPeriodButton {
+                background-color: #ffffff;
+                border: 1px solid #dce5ed;
+                border-radius: 6px;
+                color: #526b8b;
+                font-size: 10px;
+                min-height: 30px;
+                padding: 0 10px;
+            }
+            QTableWidget#dashboardTable {
+                background-color: #ffffff;
+                border: none;
+                color: #173b68;
+                font-size: 10px;
+                gridline-color: #e7edf2;
+                selection-background-color: #eef9f0;
+                selection-color: #073264;
+            }
+            QTableWidget#dashboardTable QHeaderView::section {
+                background-color: #ffffff;
+                border: none;
+                border-bottom: 1px solid #e3e9ef;
+                color: #526b8b;
+                font-size: 9px;
+                font-weight: 700;
+                min-height: 28px;
+                padding: 0 5px;
+            }
+            QFrame#dashboardInfoRow,
+            QFrame#dashboardSaleRow,
+            QFrame#dashboardSummaryRow {
+                background-color: transparent;
+                border: none;
+                border-bottom: 1px solid #edf1f4;
+            }
+            QLabel#dashboardSmallIcon_blue,
+            QLabel#dashboardSmallIcon_orange,
+            QLabel#dashboardSmallIcon_red {
+                border-radius: 6px;
+            }
+            QLabel#dashboardSmallIcon_blue { background-color: #1f74d8; }
+            QLabel#dashboardSmallIcon_orange { background-color: #ff8614; }
+            QLabel#dashboardSmallIcon_red { background-color: #ef4b55; }
+            QLabel#dashboardRowTitle {
+                color: #173b68;
+                font-size: 10px;
+                font-weight: 700;
+            }
+            QLabel#dashboardRowSubtitle {
+                color: #71839a;
+                font-size: 9px;
+            }
+            QLabel#dashboardEmpty {
+                color: #71839a;
+                font-size: 11px;
+                padding: 18px;
+            }
+            QLabel#dashboardSaleIcon {
+                background-color: #f7f9fb;
+                border: 1px solid #e3e9ef;
+                border-radius: 7px;
+            }
+            QLabel#dashboardSaleAmount {
+                color: #15933a;
+                font-size: 11px;
+                font-weight: 900;
+            }
+            QLabel#dashboardSummaryLabel {
+                color: #526b8b;
+                font-size: 10px;
+            }
+            QLabel#dashboardSummaryValue {
+                color: #15933a;
+                font-size: 11px;
+                font-weight: 900;
+            }
             QWidget#productsPage {
                 background-color: #fbfdff;
             }
@@ -642,15 +782,6 @@ class MainWindow(QMainWindow):
             }
             QWidget#ticketPage {
                 background-color: #fbfdff;
-            }
-            QLabel#saleTitle {
-                color: #073264;
-                font-size: 26px;
-                font-weight: 900;
-            }
-            QLabel#saleSubtitle {
-                color: #31547a;
-                font-size: 14px;
             }
             QFrame#salePanel {
                 background-color: #ffffff;

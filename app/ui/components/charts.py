@@ -52,15 +52,17 @@ class SalesLineChart(QChartView):
         for axis in tuple(self._chart.axes()):
             self._chart.removeAxis(axis)
 
-        line = QLineSeries()
-        line.setPen(QPen(GREEN, 3))
-        line.setPointsVisible(True)
         safe_values = list(values) or [0.0]
         safe_labels = list(labels) or [""]
-        for index, value in enumerate(safe_values):
-            point = QPointF(index, float(value))
-            line.append(point)
+        maximum = max(safe_values)
+        divisor = 1_000_000 if maximum >= 1_000_000 else (1_000 if maximum >= 1_000 else 1)
+        scaled_values = [value / divisor for value in safe_values]
 
+        line = QLineSeries()
+        line.setPointsVisible(True)
+        for index, value in enumerate(scaled_values):
+            line.append(QPointF(index, float(value)))
+        line.setPen(QPen(GREEN, 3))
         self._chart.addSeries(line)
 
         x_axis = QBarCategoryAxis()
@@ -71,9 +73,13 @@ class SalesLineChart(QChartView):
         x_axis.setLineVisible(False)
 
         y_axis = QValueAxis()
-        y_axis.setRange(0.0, max(1.0, max(safe_values) * 1.15))
+        y_axis.setRange(0.0, max(1.0, max(scaled_values) * 1.15))
         y_axis.setTickCount(5)
-        y_axis.setLabelsVisible(False)
+        if divisor == 1_000_000:
+            y_axis.setLabelFormat("%.1fM")
+        elif divisor == 1_000:
+            y_axis.setLabelFormat("%.0fK")
+        y_axis.setLabelsVisible(True)
         y_axis.setLabelsFont(QFont("Segoe UI", 8))
         y_axis.setGridLineColor(GRID)
         y_axis.setLineVisible(False)

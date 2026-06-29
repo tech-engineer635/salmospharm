@@ -97,6 +97,7 @@ class RapportSynthese:
     tendance_panier: float = 0.0
     tendance_produits: float = 0.0
     mode: str = "JOURNALIER"
+    stock_vendable: int = 0
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,21 @@ class JournalActionItem:
     action: str
     details: str
     module: str
+
+
+@dataclass(frozen=True)
+class VendeurDashboardSynthese:
+    """Donnees personnelles du tableau de bord vendeur."""
+
+    total: int
+    transactions: int
+    articles: int
+    panier_moyen: int
+    meilleure_vente: int
+    heure_active: str
+    ventes: list[VenteHistoriqueItem]
+    produits: list[ProduitVenduItem]
+    evolution_horaire: list[tuple[str, int]]
 
 
 class RapportService:
@@ -162,6 +178,55 @@ class RapportService:
             )
             for row in rows
         ]
+
+    def synthese_vendeur(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        date_reference: date | None = None,
+    ) -> VendeurDashboardSynthese:
+        """Calcule uniquement l'activite du vendeur connecte pour une journee."""
+
+        exiger_permission(
+            utilisateur.role, PERMISSION_CONSULTER_HISTORIQUE_PERSONNEL
+        )
+        reference = date_reference or date.today()
+        ventes = self.lister_ventes(
+            utilisateur,
+            date_debut=reference,
+            date_fin=reference,
+            limit=100,
+        )
+        with self._session_factory() as session:
+            produits_rows = self._rapport_repository.produits_plus_vendus(
+                session,
+                reference,
+                reference,
+                limit=5,
+                vendeur_id=utilisateur.utilisateur_id,
+            )
+            heures = self._rapport_repository.evolution_horaire(
+                session, reference, utilisateur.utilisateur_id
+            )
+        total = sum(item.total for item in ventes)
+        articles = sum(item.articles for item in ventes)
+        heure_active = max(heures, key=lambda item: item[2])[0] if heures else None
+        return VendeurDashboardSynthese(
+            total=total,
+            transactions=len(ventes),
+            articles=articles,
+            panier_moyen=int(total / len(ventes)) if ventes else 0,
+            meilleure_vente=max((item.total for item in ventes), default=0),
+            heure_active=f"{heure_active:02d}h" if heure_active is not None else "—",
+            ventes=ventes[:5],
+            produits=[
+                ProduitVenduItem(int(row[0]), str(row[1]), int(row[2]), int(row[3]))
+                for row in produits_rows
+            ],
+            evolution_horaire=[
+                (f"{heure:02d}h", montant) for heure, _transactions, montant in heures
+            ],
+        )
 
     def synthese_gerant(
         self,
@@ -230,6 +295,9 @@ class RapportService:
             produits_rows = self._rapport_repository.produits_plus_vendus(
                 session, date_debut, date_fin
             )
+            stock_vendable = self._rapport_repository.stock_vendable_total(
+                session, date_fin
+            )
 
         panier = int(total / ventes) if ventes else 0
         panier_prec = int(total_prec / ventes_prec) if ventes_prec else 0
@@ -282,6 +350,7 @@ class RapportService:
             tendance_panier=_variation(panier, panier_prec),
             tendance_produits=_variation(produits_vendus, produits_prec),
             mode=mode_normalise,
+            stock_vendable=stock_vendable,
         )
 
     def exporter_excel(

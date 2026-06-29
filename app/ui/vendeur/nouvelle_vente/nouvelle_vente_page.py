@@ -79,7 +79,6 @@ class NouvelleVentePage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
-        layout.addLayout(self._build_header())
         layout.addWidget(self._build_catalog_panel())
 
         bottom = QHBoxLayout()
@@ -87,19 +86,6 @@ class NouvelleVentePage(QWidget):
         bottom.addWidget(self._build_cart_panel(), 1)
         bottom.addWidget(self._build_summary_panel(), 0)
         layout.addLayout(bottom, 1)
-
-    def _build_header(self) -> QHBoxLayout:
-        header = QHBoxLayout()
-        text = QVBoxLayout()
-        text.setSpacing(4)
-        title = QLabel("Nouvelle vente")
-        title.setObjectName("saleTitle")
-        subtitle = QLabel("Point de vente")
-        subtitle.setObjectName("saleSubtitle")
-        text.addWidget(title)
-        text.addWidget(subtitle)
-        header.addLayout(text, 1)
-        return header
 
     def _build_catalog_panel(self) -> QFrame:
         panel = QFrame()

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import Integer, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.constants import STATUT_VENTE_VALIDEE
-from app.database.models import Categorie, JournalActivite, LigneVente, Produit, Utilisateur, Vente
+from app.database.models import Categorie, JournalActivite, LigneVente, LotProduit, Produit, Utilisateur, Vente
 
 
 class RapportRepository:
@@ -115,8 +115,15 @@ class RapportRepository:
         ).all()
         return {row[0]: int(row[1]) for row in rows}
 
-    def produits_plus_vendus(self, session: Session, date_debut: date, date_fin: date, limit: int = 10) -> list[tuple[int, str, int, int]]:
-        rows = session.execute(
+    def produits_plus_vendus(
+        self,
+        session: Session,
+        date_debut: date,
+        date_fin: date,
+        limit: int = 10,
+        vendeur_id: int | None = None,
+    ) -> list[tuple[int, str, int, int]]:
+        statement = (
             select(
                 Produit.id,
                 Produit.nom,
@@ -133,8 +140,53 @@ class RapportRepository:
             .group_by(Produit.id, Produit.nom)
             .order_by(func.coalesce(func.sum(LigneVente.quantite), 0).desc())
             .limit(limit)
-        ).all()
+        )
+        if vendeur_id is not None:
+            statement = statement.where(Vente.vendeur_id == vendeur_id)
+        rows = session.execute(statement).all()
         return [(int(row[0]), str(row[1]), int(row[2]), int(row[3])) for row in rows]
+
+    def evolution_horaire(
+        self,
+        session: Session,
+        jour_reference: date,
+        vendeur_id: int,
+    ) -> list[tuple[int, int, int]]:
+        """Agrege les ventes validees du vendeur par heure."""
+
+        heure = func.cast(func.substr(Vente.cree_le, 12, 2), Integer)
+        rows = session.execute(
+            select(
+                heure,
+                func.count(Vente.id),
+                func.coalesce(func.sum(Vente.total), 0),
+            )
+            .where(
+                Vente.statut == STATUT_VENTE_VALIDEE,
+                Vente.vendeur_id == vendeur_id,
+                self._dans_periode(Vente.cree_le, jour_reference, jour_reference),
+            )
+            .group_by(heure)
+            .order_by(heure)
+        ).all()
+        return [(int(row[0]), int(row[1]), int(row[2])) for row in rows]
+
+    def stock_vendable_total(self, session: Session, date_reference: date) -> int:
+        """Retourne la quantite totale des lots actifs et non expires."""
+
+        total = session.execute(
+            select(func.coalesce(func.sum(LotProduit.quantite), 0))
+            .join(Produit, Produit.id == LotProduit.produit_id)
+            .where(
+                Produit.actif == 1,
+                LotProduit.quantite > 0,
+                or_(
+                    LotProduit.date_expiration.is_(None),
+                    LotProduit.date_expiration >= date_reference.isoformat(),
+                ),
+            )
+        ).scalar_one()
+        return int(total)
 
     def lister_ventes(
         self,

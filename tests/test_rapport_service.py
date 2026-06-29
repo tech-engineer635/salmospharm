@@ -34,6 +34,27 @@ def test_historique_gerant_voit_tout_et_vendeur_uniquement_ses_ventes(tmp_path):
     assert [vente.vente_id for vente in personnelles] == [vente_jean]
 
 
+def test_synthese_dashboard_vendeur_reste_strictement_personnelle(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    jean = _creer_utilisateur(SessionLocal, ROLE_VENDEUR, "jean@test.local", "Jean K.")
+    alice = _creer_utilisateur(SessionLocal, ROLE_VENDEUR, "alice@test.local", "Alice M.")
+    _creer_vente(SessionLocal, jean, "Paracetamol", 1000, 2)
+    _creer_vente(SessionLocal, alice, "Vitamine C", 5000, 4)
+    service = RapportService(session_factory=SessionLocal)
+
+    data = service.synthese_vendeur(jean, date_reference=date.today())
+
+    engine.dispose()
+
+    assert data.total == 2000
+    assert data.transactions == 1
+    assert data.articles == 2
+    assert data.panier_moyen == 2000
+    assert data.meilleure_vente == 2000
+    assert [produit.produit_nom for produit in data.produits] == ["Paracetamol"]
+    assert data.evolution_horaire
+
+
 def test_synthese_gerant_calcule_journalier_mensuel_vendeur_et_top_produits(tmp_path):
     engine, SessionLocal = _create_test_session_factory(tmp_path)
     gerant = _creer_utilisateur(SessionLocal, ROLE_GERANT, "gerant@test.local", "Gerant")

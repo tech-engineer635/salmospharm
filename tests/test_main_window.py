@@ -123,14 +123,27 @@ def test_topbar_et_sidebar_affichent_des_icones():
     app.processEvents()
 
 
-def test_dashboard_gerant_periodes_et_liens_ouvrent_pages_reelles():
+def test_dashboard_gerant_structure_et_liens_ouvrent_pages_reelles():
     app = _app()
     window = MainWindow(session_utilisateur=_session(ROLE_GERANT))
 
     window.navigate("dashboard")
     dashboard = window._page_widgets["dashboard"]
     labels = {button.text().strip() for button in dashboard.findChildren(QPushButton)}
-    assert {"Jour", "7 jours", "30 jours"} <= labels
+    assert "7 derniers jours" in labels
+    texts = {label.text() for label in dashboard.findChildren(QLabel)}
+    assert {
+        "Ventes du jour",
+        "Transactions",
+        "Articles vendables",
+        "Stock faible",
+        "Expirations proches",
+        "Évolution des ventes (CDF)",
+        "Top produits vendus",
+        "Synthèse par vendeur",
+        "Activités récentes",
+        "Alertes rapides",
+    } <= texts
     rapports = next(
         button
         for button in dashboard.findChildren(QPushButton)
@@ -138,6 +151,28 @@ def test_dashboard_gerant_periodes_et_liens_ouvrent_pages_reelles():
     )
     rapports.click()
     assert window.content_stack.currentIndex() == window._pages["rapports"]
+
+    window.close()
+    app.processEvents()
+
+
+def test_dashboard_vendeur_affiche_structure_personnelle():
+    app = _app()
+    window = MainWindow(session_utilisateur=_session(ROLE_VENDEUR))
+    dashboard = window._page_widgets["dashboard"]
+    texts = {label.text() for label in dashboard.findChildren(QLabel)}
+
+    assert window.topbar.title_label.text() == "Tableau de bord vendeur"
+    assert {
+        "Ventes du jour",
+        "Transactions",
+        "Total encaissé (CDF)",
+        "Articles vendus",
+        "Évolution des ventes (CDF)",
+        "Ventes récentes",
+        "Produits les plus vendus aujourd’hui",
+        "Résumé du jour",
+    } <= texts
 
     window.close()
     app.processEvents()

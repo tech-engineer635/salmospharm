@@ -1091,11 +1091,19 @@ Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
   sans creation d'une table `factures`.
 - Sidebar conservee sur les fenetres de bureau a partir de 1180 px afin de
   respecter les proportions de la maquette Factures.
+- Tableaux de bord gerant et vendeur reconstruits selon les maquettes validees :
+  cartes KPI avec icones semantiques, courbes, top produits, ventes recentes,
+  synthese vendeurs, activites et alertes rapides.
+- Dashboard vendeur strictement personnel avec une nouvelle synthese de lecture
+  (evolution horaire, top produits, panier moyen, meilleure vente et heure la
+  plus active), sans objectif fictif ni nouvelle table.
+- Dashboard gerant complete avec stock vendable reel, tendances comparees,
+  journal recent et alertes stock/expiration separees.
 
 ### Validation executee
 
 ```txt
-115 tests pytest reussis
+117 tests pytest reussis
 Compilation de tous les modules app reussie
 python app/main.py lance avec succes dans un AppData temporaire
 Build PyInstaller reussi

@@ -2,26 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QButtonGroup,
-    QFrame,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QMessageBox,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
-    QWidget,
+    QFrame, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
 from app.core.exceptions import SalmospharmError
 from app.services.auth_service import SessionUtilisateur
 from app.services.rapport_service import RapportService
+from app.ui.components.charts import SalesLineChart
+from app.ui.components.dashboard import DashboardMetricCard, empty_label, panel_header
+from app.ui.components.icons import ui_icon
 
 
 class VendeurDashboardPage(QWidget):
@@ -36,109 +28,168 @@ class VendeurDashboardPage(QWidget):
         super().__init__(parent)
         self.session_utilisateur = session_utilisateur
         self._rapport_service = rapport_service or RapportService()
-        self._jours = 1
-        self.setObjectName("dashboardPage")
+        self.setObjectName("sellerDashboard")
         self._build_ui()
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
-        periods = QHBoxLayout()
-        periods.addWidget(QLabel("Periode"))
-        group = QButtonGroup(self)
-        for label, days in (("Jour", 1), ("7 jours", 7), ("30 jours", 30)):
-            button = QPushButton(label)
-            button.setCheckable(True)
-            button.setObjectName("smallButton")
-            button.setChecked(days == 1)
-            button.clicked.connect(lambda checked=False, value=days: self._set_period(value))
-            group.addButton(button)
-            periods.addWidget(button)
-        periods.addStretch(1)
-        layout.addLayout(periods)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(16)
+        cards = QHBoxLayout()
+        cards.setSpacing(16)
+        self.sales_card = DashboardMetricCard("Ventes du jour", "cart", "green")
+        self.transactions_card = DashboardMetricCard("Transactions", "receipt", "blue")
+        self.total_card = DashboardMetricCard("Total encaissé (CDF)", "wallet", "green")
+        self.items_card = DashboardMetricCard("Articles vendus", "stock", "blue")
+        for card in (self.sales_card, self.transactions_card, self.total_card, self.items_card):
+            cards.addWidget(card, 1)
+        root.addLayout(cards)
 
-        cards = QGridLayout()
-        self.total_card = MetricCard("Total encaisse", "0 CDF")
-        self.transactions_card = MetricCard("Transactions", "0")
-        self.average_card = MetricCard("Panier moyen", "0 CDF")
-        self.items_card = MetricCard("Articles vendus", "0")
-        for index, card in enumerate(
-            (self.total_card, self.transactions_card, self.average_card, self.items_card)
-        ):
-            cards.addWidget(card, index // 2, index % 2)
-        layout.addLayout(cards)
+        middle = QHBoxLayout()
+        middle.setSpacing(16)
+        chart_panel = _panel("sellerEvolutionPanel")
+        header, _ = panel_header("Évolution des ventes (CDF)")
+        period = QPushButton("Aujourd’hui")
+        period.setObjectName("dashboardPeriodButton")
+        header.addWidget(period)
+        chart_panel.layout().addLayout(header)
+        self.chart_host = QVBoxLayout()
+        chart_panel.layout().addLayout(self.chart_host, 1)
+        middle.addWidget(chart_panel, 3)
 
-        panel = QFrame()
-        panel.setObjectName("contentPanel")
-        panel_layout = QVBoxLayout(panel)
-        header = QHBoxLayout()
-        header.addWidget(QLabel("Ventes recentes"))
-        header.addStretch(1)
-        view = QPushButton("Voir tout")
-        view.setObjectName("outlineButton")
-        view.clicked.connect(lambda: self.voir_tout_demande.emit("historique_ventes"))
-        header.addWidget(view)
-        panel_layout.addLayout(header)
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(
-            ["Numero", "Date", "Articles", "Total (CDF)"]
-        )
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.verticalHeader().setVisible(False)
-        panel_layout.addWidget(self.table)
-        layout.addWidget(panel, 1)
+        recent_panel = _panel("sellerRecentSalesPanel")
+        header, button = panel_header("Ventes récentes", "Voir tout")
+        button.clicked.connect(lambda: self.voir_tout_demande.emit("historique_ventes"))
+        recent_panel.layout().addLayout(header)
+        self.recent_layout = QVBoxLayout()
+        recent_panel.layout().addLayout(self.recent_layout)
+        middle.addWidget(recent_panel, 2)
+        root.addLayout(middle, 3)
 
-    def _set_period(self, days: int) -> None:
-        self._jours = days
-        self.on_show()
+        bottom = QHBoxLayout()
+        bottom.setSpacing(16)
+        products_panel = _panel("sellerTopProductsPanel")
+        products_panel.layout().addLayout(panel_header("Produits les plus vendus aujourd’hui")[0])
+        self.products_table = QTableWidget(0, 3)
+        self.products_table.setObjectName("dashboardTable")
+        self.products_table.setHorizontalHeaderLabels(["Produit", "Quantité vendue", "Chiffre d’affaires (CDF)"])
+        self.products_table.verticalHeader().setVisible(False)
+        self.products_table.setShowGrid(False)
+        self.products_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.products_table.horizontalHeader().setStretchLastSection(True)
+        products_panel.layout().addWidget(self.products_table)
+        bottom.addWidget(products_panel, 3)
+
+        summary = _panel("sellerSummaryPanel")
+        summary.layout().addLayout(panel_header("Résumé du jour")[0])
+        self.average_value = _summary_row(summary.layout(), "Panier moyen", "wallet")
+        self.best_value = _summary_row(summary.layout(), "Meilleure vente", "money")
+        self.hour_value = _summary_row(summary.layout(), "Heure la plus active", "history")
+        self.article_value = _summary_row(summary.layout(), "Total d’articles", "stock")
+        summary.layout().addStretch(1)
+        bottom.addWidget(summary, 2)
+        root.addLayout(bottom, 2)
 
     def on_show(self) -> None:
-        fin = date.today()
-        debut = fin - timedelta(days=self._jours - 1)
         try:
-            ventes = self._rapport_service.lister_ventes(
-                self.session_utilisateur,
-                date_debut=debut,
-                date_fin=fin,
-                limit=100,
-            )
-        except SalmospharmError as exc:
-            QMessageBox.warning(self, "Tableau de bord", str(exc))
+            data = self._rapport_service.synthese_vendeur(self.session_utilisateur)
+        except SalmospharmError:
             return
-        total = sum(item.total for item in ventes)
-        articles = sum(item.articles for item in ventes)
-        self.total_card.set_value(_cdf(total))
-        self.transactions_card.set_value(str(len(ventes)))
-        self.average_card.set_value(_cdf(int(total / len(ventes)) if ventes else 0))
-        self.items_card.set_value(str(articles))
-        self.table.setRowCount(len(ventes[:10]))
-        for row, item in enumerate(ventes[:10]):
-            for column, value in enumerate(
-                (
-                    item.numero_vente,
-                    item.date_vente,
-                    str(item.articles),
-                    _number(item.total),
-                )
-            ):
-                self.table.setItem(row, column, QTableWidgetItem(value))
+        self.sales_card.set_data(_cdf(data.total), None, "Activité personnelle")
+        self.transactions_card.set_data(str(data.transactions), None, "Ventes validées")
+        self.total_card.set_data(_cdf(data.total), None, "Espèces encaissées")
+        self.items_card.set_data(str(data.articles), None, "Quantité totale")
+        _clear_layout(self.chart_host)
+        self.chart_host.addWidget(
+            SalesLineChart(
+                [label for label, _value in data.evolution_horaire],
+                [value for _label, value in data.evolution_horaire],
+            )
+        )
+        _clear_layout(self.recent_layout)
+        for sale in data.ventes:
+            self.recent_layout.addWidget(_sale_row(sale.numero_vente, sale.date_vente, sale.total))
+        if not data.ventes:
+            self.recent_layout.addWidget(empty_label("Aucune vente aujourd’hui."))
+        self.products_table.setRowCount(len(data.produits))
+        for row, product in enumerate(data.produits):
+            self.products_table.setRowHeight(row, 34)
+            for column, value in enumerate((product.produit_nom, str(product.quantite), _number(product.total))):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | (Qt.AlignmentFlag.AlignRight if column else Qt.AlignmentFlag.AlignLeft))
+                self.products_table.setItem(row, column, item)
+        self.average_value.setText(_cdf(data.panier_moyen))
+        self.best_value.setText(_cdf(data.meilleure_vente))
+        self.hour_value.setText(data.heure_active)
+        self.article_value.setText(str(data.articles))
+
+    def set_compact(self, compact: bool) -> None:
+        self.layout().setSpacing(10 if compact else 16)
+        for card in self.findChildren(DashboardMetricCard):
+            card.setMinimumHeight(88 if compact else 104)
 
 
-class MetricCard(QFrame):
-    def __init__(self, title: str, value: str) -> None:
-        super().__init__()
-        self.setObjectName("statCard")
-        layout = QVBoxLayout(self)
-        title_label = QLabel(title)
-        title_label.setObjectName("statTitle")
-        self.value_label = QLabel(value)
-        self.value_label.setObjectName("statValue")
-        layout.addWidget(title_label)
-        layout.addWidget(self.value_label)
+def _panel(name: str) -> QFrame:
+    panel = QFrame()
+    panel.setObjectName(name)
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(18, 15, 18, 15)
+    layout.setSpacing(10)
+    return panel
 
-    def set_value(self, value: str) -> None:
-        self.value_label.setText(value)
+
+def _summary_row(layout: QVBoxLayout, title: str, icon: str) -> QLabel:
+    row = QFrame()
+    row.setObjectName("dashboardSummaryRow")
+    row_layout = QHBoxLayout(row)
+    row_layout.setContentsMargins(7, 7, 7, 7)
+    icon_label = QLabel()
+    icon_label.setPixmap(ui_icon(icon, "#15933a", 16).pixmap(16, 16))
+    label = QLabel(title)
+    label.setObjectName("dashboardSummaryLabel")
+    value = QLabel("—")
+    value.setObjectName("dashboardSummaryValue")
+    row_layout.addWidget(icon_label)
+    row_layout.addWidget(label)
+    row_layout.addStretch(1)
+    row_layout.addWidget(value)
+    layout.addWidget(row)
+    return value
+
+
+def _sale_row(number: str, date_value: str, total: int) -> QFrame:
+    row = QFrame()
+    row.setObjectName("dashboardSaleRow")
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(7, 6, 7, 6)
+    icon = QLabel()
+    icon.setObjectName("dashboardSaleIcon")
+    icon.setFixedSize(34, 34)
+    icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    icon.setPixmap(ui_icon("receipt", "#173b68", 17).pixmap(17, 17))
+    texts = QVBoxLayout()
+    texts.setSpacing(0)
+    number_label = QLabel(number)
+    number_label.setObjectName("dashboardRowTitle")
+    date_label = QLabel(date_value)
+    date_label.setObjectName("dashboardRowSubtitle")
+    texts.addWidget(number_label)
+    texts.addWidget(date_label)
+    amount = QLabel(_cdf(total))
+    amount.setObjectName("dashboardSaleAmount")
+    layout.addWidget(icon)
+    layout.addLayout(texts, 1)
+    layout.addWidget(amount)
+    return row
+
+
+def _clear_layout(layout: QVBoxLayout) -> None:
+    while layout.count():
+        item = layout.takeAt(0)
+        widget = item.widget()
+        if widget:
+            widget.setParent(None)
+            widget.deleteLater()
 
 
 def _number(value: int) -> str:
