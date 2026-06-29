@@ -1105,11 +1105,17 @@ Executable dist\SALMOSPHARM\SALMOSPHARM.exe lance avec succes
   ete ajoute.
 - Consultation des alertes etendue dans le service/repository avec terme, type,
   etat lu, limite et decalage, sans migration de base.
+- Page vendeur Recherche produit reconstruite selon la maquette : recherche
+  nom/code-barres, categories reelles, tableau dense, prix CDF, stock vendable
+  et badges En stock/Stock faible/Rupture.
+- Consultation stock separee du point de vente : les produits actifs en rupture
+  restent visibles en lecture seule mais demeurent exclus de la vente. Aucun
+  laboratoire, principe actif, photo ou champ fictif n'a ete ajoute.
 
 ### Validation executee
 
 ```txt
-118 tests pytest reussis
+121 tests pytest reussis
 Compilation de tous les modules app reussie
 python app/main.py lance avec succes dans un AppData temporaire
 Build PyInstaller reussi

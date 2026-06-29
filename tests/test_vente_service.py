@@ -233,6 +233,38 @@ def test_lister_produits_vendables_exclut_stock_expire_ou_vide(tmp_path):
     assert [(produit.produit_id, produit.stock_disponible) for produit in produits] == [(disponible_id, 3)]
 
 
+def test_consultation_stock_inclut_rupture_et_exclut_lot_expire_du_total(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    vendeur = _creer_utilisateur(SessionLocal, ROLE_VENDEUR)
+    disponible_id = _creer_produit(SessionLocal, nom="Paracetamol", prix_vente=1000, stock_minimum=2)
+    rupture_id = _creer_produit(SessionLocal, nom="Amoxicilline", prix_vente=1500, stock_minimum=4)
+    _creer_lot(SessionLocal, produit_id=disponible_id, numero_lot="LOT-A", quantite=3, date_expiration="2026-08-01")
+    _creer_lot(SessionLocal, produit_id=disponible_id, numero_lot="LOT-EXPIRE", quantite=9, date_expiration="2026-06-25")
+    service = VenteService(session_factory=SessionLocal)
+
+    produits = service.consulter_stock_produits(vendeur, date_reference=date(2026, 6, 26))
+    recherche = service.consulter_stock_produits(vendeur, terme="AMOXICILLINE", date_reference=date(2026, 6, 26))
+    vendables = service.lister_produits_vendables(vendeur, date_reference=date(2026, 6, 26))
+
+    engine.dispose()
+
+    stocks = {produit.produit_id: produit.stock_disponible for produit in produits}
+    assert stocks == {rupture_id: 0, disponible_id: 3}
+    assert [produit.produit_id for produit in recherche] == [rupture_id]
+    assert [produit.produit_id for produit in vendables] == [disponible_id]
+
+
+def test_consultation_stock_refuse_role_inconnu(tmp_path):
+    engine, SessionLocal = _create_test_session_factory(tmp_path)
+    service = VenteService(session_factory=SessionLocal)
+    invite = SessionUtilisateur(99, "Invite", "invite", "INVITE")
+
+    with pytest.raises(PermissionRefuseeError):
+        service.consulter_stock_produits(invite)
+
+    engine.dispose()
+
+
 def _create_test_session_factory(tmp_path):
     database_path = tmp_path / "salmospharm.sqlite3"
     engine = create_app_engine(database_path)

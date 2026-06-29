@@ -3,7 +3,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtGui import QColor, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QRadioButton
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton, QRadioButton
 
 from app.core.constants import ROLE_GERANT, ROLE_VENDEUR
 from app.main import MainWindow
@@ -523,6 +523,21 @@ def test_navigation_affiche_ecran_factures_complet():
     assert "Factures du jour" in labels
     assert "Montant total encaissé" in labels
     assert "Sélectionnez une facture dans la liste." in labels
+
+    window.close()
+    app.processEvents()
+
+
+def test_recherche_produit_affiche_recherche_categories_tableau_et_information():
+    app = _app()
+    window = MainWindow(session_utilisateur=_session(ROLE_VENDEUR))
+    window.navigate("produits")
+    page = window._page_widgets["produits"]
+
+    assert page.objectName() == "productSearchPage"
+    assert page.findChild(QLineEdit, "productLookupSearch") is not None
+    assert any(button.text() == "Tous" for button in page.findChildren(QPushButton))
+    assert any("rupture" in label.text().lower() for label in page.findChildren(QLabel))
 
     window.close()
     app.processEvents()

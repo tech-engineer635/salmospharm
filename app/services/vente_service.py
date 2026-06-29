@@ -13,7 +13,7 @@ from app.core.constants import ACTION_VENTE_VALIDEE, STATUT_VENTE_VALIDEE, TYPE_
 from app.core.exceptions import ProduitInactifError, SalmospharmError, StockInsuffisantError, UtilisateurInactifError, ValidationError
 from app.core.permissions import PERMISSION_CREER_VENTE, PERMISSION_RECHERCHER_PRODUITS, exiger_permission
 from app.database.connection import create_session
-from app.database.models import LigneVente, MouvementStock, Vente
+from app.database.models import Categorie, LigneVente, MouvementStock, Vente
 from app.repositories.categorie_repository import CategorieRepository
 from app.repositories.lot_produit_repository import LotProduitRepository
 from app.repositories.produit_repository import ProduitRepository
@@ -49,6 +49,21 @@ class ProduitVendable:
     produit_id: int
     nom: str
     prix_vente: int
+    stock_disponible: int
+    categorie_id: int | None
+    categorie_nom: str | None
+    description: str | None
+
+
+@dataclass(frozen=True)
+class ProduitConsultationStock:
+    """Produit actif consultable, y compris lorsqu'il est en rupture."""
+
+    produit_id: int
+    nom: str
+    code_barres: str | None
+    prix_vente: int
+    stock_minimum: int
     stock_disponible: int
     categorie_id: int | None
     categorie_nom: str | None
@@ -157,6 +172,55 @@ class VenteService:
                     )
                 )
             return cards
+
+    def consulter_stock_produits(
+        self,
+        utilisateur: SessionUtilisateur,
+        *,
+        terme: str = "",
+        categorie_id: int | None = None,
+        date_reference: date | None = None,
+    ) -> list[ProduitConsultationStock]:
+        """Retourne tous les produits actifs avec leur stock vendable réel."""
+
+        exiger_permission(utilisateur.role, PERMISSION_RECHERCHER_PRODUITS)
+        reference = date_reference or date.today()
+        with self._session_factory() as session:
+            categories = {
+                categorie.id: categorie.nom
+                for categorie in self._categorie_repository.lister(session)
+            }
+            produits = self._produit_repository.rechercher(
+                session,
+                terme=terme,
+                categorie_id=categorie_id,
+                actifs_seulement=True,
+            )
+            return [
+                ProduitConsultationStock(
+                    produit_id=produit.id,
+                    nom=produit.nom,
+                    code_barres=produit.code_barres,
+                    prix_vente=produit.prix_vente,
+                    stock_minimum=produit.stock_minimum,
+                    stock_disponible=self._stock_repository.calculer_stock_disponible(
+                        session, produit.id, reference.isoformat()
+                    ),
+                    categorie_id=produit.categorie_id,
+                    categorie_nom=categories.get(produit.categorie_id),
+                    description=produit.description,
+                )
+                for produit in produits
+            ]
+
+    def lister_categories_consultation(
+        self, utilisateur: SessionUtilisateur
+    ) -> list[Categorie]:
+        """Expose les catégories à l'écran vendeur en lecture seule."""
+
+        exiger_permission(utilisateur.role, PERMISSION_RECHERCHER_PRODUITS)
+        with self._session_factory() as session:
+            return self._categorie_repository.lister(session)
 
     def valider_vente(
         self,

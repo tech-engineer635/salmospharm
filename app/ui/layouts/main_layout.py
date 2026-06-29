@@ -735,6 +735,98 @@ class MainWindow(QMainWindow):
             QWidget#productsPage {
                 background-color: #fbfdff;
             }
+            QWidget#productSearchPage {
+                background-color: #fbfdff;
+                font-family: "Segoe UI";
+            }
+            QLineEdit#productLookupSearch {
+                background-color: #ffffff;
+                border: 1px solid #dce5ed;
+                border-radius: 9px;
+                color: #073264;
+                font-size: 13px;
+                min-height: 52px;
+                padding: 0 14px;
+            }
+            QScrollArea#productCategoriesScroll {
+                background: transparent;
+                border: none;
+            }
+            QScrollArea#productCategoriesScroll QWidget {
+                background: transparent;
+            }
+            QPushButton#productCategoryChip {
+                background-color: #ffffff;
+                border: 1px solid #dce5ed;
+                border-radius: 8px;
+                color: #173b68;
+                font-size: 11px;
+                font-weight: 700;
+                min-height: 36px;
+                padding: 0 16px;
+            }
+            QPushButton#productCategoryChip:hover {
+                border-color: #7bc990;
+                color: #15933a;
+            }
+            QPushButton#productCategoryChip:checked {
+                background-color: #eef9f0;
+                border-color: #56b96f;
+                color: #138736;
+            }
+            QFrame#productLookupPanel,
+            QFrame#productLookupInfo {
+                background-color: #ffffff;
+                border: 1px solid #e3e9ef;
+                border-radius: 10px;
+            }
+            QTableWidget#productLookupTable {
+                background-color: #ffffff;
+                border: none;
+                color: #173b68;
+                font-size: 11px;
+                selection-background-color: #eef9f0;
+                selection-color: #073264;
+            }
+            QTableWidget#productLookupTable QHeaderView::section {
+                background-color: #ffffff;
+                border: none;
+                border-bottom: 1px solid #e3e9ef;
+                color: #073264;
+                font-size: 10px;
+                font-weight: 900;
+                min-height: 40px;
+                padding: 0 10px;
+            }
+            QLabel#productStockBadge {
+                border-radius: 7px;
+                font-size: 10px;
+                font-weight: 800;
+                margin: 10px 8px;
+                min-width: 76px;
+                padding: 3px 8px;
+            }
+            QLabel#productStockBadge[tone="green"] {
+                background-color: #eaf8ee;
+                color: #138736;
+            }
+            QLabel#productStockBadge[tone="orange"] {
+                background-color: #fff3e5;
+                color: #c65e00;
+            }
+            QLabel#productStockBadge[tone="red"] {
+                background-color: #ffecef;
+                color: #c92f3d;
+            }
+            QLabel#productLookupEmpty {
+                color: #71839a;
+                font-size: 12px;
+                padding: 24px;
+            }
+            QLabel#productLookupInfoText {
+                color: #173b68;
+                font-size: 11px;
+            }
             QWidget#productsPage QLineEdit,
             QWidget#productsPage QSpinBox,
             QWidget#productsPage QComboBox {
